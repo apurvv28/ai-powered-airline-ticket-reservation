@@ -1,95 +1,38 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+"use client";
+
+import FlightSearchForm from "@/components/FlightSearchForm";
 
 export default function Home() {
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol>
-          <li>
-            Get started by editing <code>app/page.js</code>.
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12">
+      <div className="max-w-6xl mx-auto px-6">
+        <header className="text-center mb-12">
+          <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900">Fly smarter with AI</h1>
+          <p className="mt-4 text-gray-700 max-w-2xl mx-auto">
+            Search, compare and book flights with AI-powered price predictions and itinerary planning.
+          </p>
+        </header>
 
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.secondary}
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className={styles.footer}>
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        <section className="bg-white rounded-2xl shadow-lg p-8">
+          <h2 className="text-2xl font-semibold mb-4 text-gray-800">Find the best flight</h2>
+          <FlightSearchForm />
+        </section>
+
+        <section className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white rounded-lg p-6 shadow">
+            <h3 className="font-semibold mb-2">🤖 AI Budget Predictor</h3>
+            <p className="text-sm text-gray-600">Get estimated ticket prices using historical data and AI.</p>
+          </div>
+          <div className="bg-white rounded-lg p-6 shadow">
+            <h3 className="font-semibold mb-2">🗺️ Itinerary Planner</h3>
+            <p className="text-sm text-gray-600">Plan your trip with personalized day-by-day itineraries.</p>
+          </div>
+          <div className="bg-white rounded-lg p-6 shadow">
+            <h3 className="font-semibold mb-2">🔒 Secure Bookings</h3>
+            <p className="text-sm text-gray-600">Manage your bookings and view your travel history.</p>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

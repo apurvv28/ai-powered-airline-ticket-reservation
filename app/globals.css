@@ -16,6 +16,11 @@ body {
   overflow-x: hidden;
 }
 
+/* Tailwind base/styles */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 body {
   color: var(--foreground);
   background: var(--background);
