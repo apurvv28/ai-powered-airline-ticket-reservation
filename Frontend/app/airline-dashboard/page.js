@@ -510,11 +510,11 @@ export default function AirlineDashboard() {
                         <TableCell>
                           <Box>
                             <Typography variant="body2" fontWeight="bold">
-                              ${flight.discount?.hasDiscount ? getDiscountedPrice(flight).toFixed(2) : flight.price}
+                              ₹{flight.discount?.hasDiscount ? getDiscountedPrice(flight).toFixed(2) : flight.price}
                             </Typography>
                             {flight.discount?.hasDiscount && (
                               <Typography variant="caption" color="error" sx={{ textDecoration: 'line-through' }}>
-                                ${flight.price}
+                                ₹{flight.price}
                               </Typography>
                             )}
                           </Box>

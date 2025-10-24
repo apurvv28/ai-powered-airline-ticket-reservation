@@ -38,29 +38,48 @@ export default function AirlineLoginPage() {
     setError("");
 
     try {
+      // Check for empty fields
+      if (!formData.username || !formData.password) {
+        throw new Error("Username and password are required");
+      }
+
+      // Make sure username follows the expected format
+      if (!formData.username.endsWith('@skywings')) {
+        throw new Error("Username must be in the format: airlinename@skywings");
+      }
+
       const response = await fetch("http://localhost:5000/api/airlines/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Accept": "application/json",
+          "Access-Control-Allow-Origin": "*"
         },
-        body: JSON.stringify(formData),
+        mode: "cors",
+        body: JSON.stringify(formData)
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message);
+        throw new Error(data.message || "Login failed. Please check your credentials.");
+      }
+
+      if (!data.airline || !data.token) {
+        throw new Error("Invalid server response. Please try again.");
       }
 
       // Store airline info and redirect to dashboard
       localStorage.setItem("airline", JSON.stringify(data.airline));
       localStorage.setItem("airlineToken", data.token);
       localStorage.setItem("isAirlineLoggedIn", "true");
+      localStorage.setItem("lastLogin", new Date().toISOString());
 
       // Redirect to airline dashboard
       router.push("/airline-dashboard");
     } catch (err) {
-      setError(err.message);
+      console.error("Login error:", err);
+      setError(err.message || "An error occurred during login. Please try again.");
     } finally {
       setLoading(false);
     }

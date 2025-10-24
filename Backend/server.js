@@ -12,7 +12,13 @@ const port = 5000;
 // Define cache directory
 const cacheDir = path.join(__dirname, 'cache');
 
-app.use(cors());
+// Configure CORS
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
 app.use(bodyParser.json());
 
 mongoose.connect("mongodb://localhost:27017/airline_booking", {
@@ -394,7 +400,7 @@ app.post("/api/airlines/login", async (req, res) => {
     res.json({
       message: "Login successful",
       airline: credential.airlineId,
-      token: "dummy-token" // In production, use JWT
+      token: "dummy-token" 
     });
 
   } catch (err) {

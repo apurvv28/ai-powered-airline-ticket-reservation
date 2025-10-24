@@ -27,6 +27,7 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import CloseIcon from '@mui/icons-material/Close';
 import { LocalizationProvider, DatePicker } from "@mui/x-date-pickers";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import AiFlightRecommender from '../components/AiFlightRecommender';
 
 export default function SearchFlightsPage() {
   const theme = useTheme();
@@ -797,7 +798,7 @@ export default function SearchFlightsPage() {
                                                     lineHeight: 1.2
                                                   }}
                                                 >
-                                                  ${finalPrice.toFixed(2)}
+                                                  ₹{finalPrice.toFixed(2)}
                                                 </Typography>
                                                 <Typography 
                                                   variant="body2" 
@@ -806,7 +807,7 @@ export default function SearchFlightsPage() {
                                                     color: 'text.secondary'
                                                   }}
                                                 >
-                                                  ${flight.price}
+                                                  ₹{flight.price}
                                                 </Typography>
                                                 <Chip 
                                                   label="Discount" 
@@ -824,7 +825,7 @@ export default function SearchFlightsPage() {
                                                   lineHeight: 1.2
                                                 }}
                                               >
-                                                ${flight.price}
+                                                ₹{flight.price}
                                               </Typography>
                                             )}
                                           </Box>
@@ -885,122 +886,14 @@ export default function SearchFlightsPage() {
         )}
 
         {/* AI Recommendations Dialog - Keep this part the same as before */}
-        <Dialog
-          open={aiDialogOpen}
-          onClose={() => setAiDialogOpen(false)}
-          maxWidth="md"
-          fullWidth
-        >
-          <DialogTitle sx={{ 
-            background: theme.palette.primary.main,
-            color: 'white',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <SmartToyIcon />
-              <Typography variant="h6" component="div">
-                AI Flight Recommendations
-              </Typography>
-            </Box>
-            <IconButton
-              onClick={() => setAiDialogOpen(false)}
-              sx={{ color: 'white' }}
-            >
-              <CloseIcon />
-            </IconButton>
-          </DialogTitle>
-          
-          <DialogContent sx={{ p: 3 }}>
-            {aiLoading ? (
-              <Box sx={{ textAlign: 'center', py: 4 }}>
-                <CircularProgress sx={{ color: theme.palette.primary.main, mb: 2 }} />
-                <Typography variant="h6" color="text.secondary">
-                  Analyzing flights with AI...
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Finding the best options based on price, duration, and convenience
-                </Typography>
-              </Box>
-            ) : aiRecommendations.length > 0 ? (
-              <Box>
-                <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
-                  🎯 Top AI Recommendations for {searchSource} to {searchDestination}
-                </Typography>
-                <Grid container spacing={2}>
-                  {aiRecommendations.map((flight, index) => (
-                    <Grid item xs={12} key={index}>
-                      <Card sx={{ border: `2px solid ${theme.palette.secondary.main}`, borderRadius: 2 }}>
-                        <CardContent>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
-                            <Box>
-                              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                                {flight.airline} • {flight.flightNumber}
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                {flight.source} → {flight.destination}
-                              </Typography>
-                              <Chip 
-                                label={flight.recommendationReason} 
-                                size="small" 
-                                sx={{ 
-                                  mt: 1,
-                                  background: theme.palette.secondary.main,
-                                  color: 'white',
-                                  fontWeight: 'bold'
-                                }}
-                              />
-                            </Box>
-                            <Box sx={{ textAlign: 'right' }}>
-                              <Typography variant="h5" sx={{ fontWeight: 'bold', color: theme.palette.primary.main }}>
-                                ${getDiscountedPrice(flight).toFixed(2)}
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                {Math.floor(flight.duration / 60)}h {flight.duration % 60}m • {flight.stops} stops
-                              </Typography>
-                              <Button 
-                                variant="contained" 
-                                size="small"
-                                sx={{
-                                  mt: 1,
-                                  background: theme.palette.primary.main,
-                                  '&:hover': {
-                                    background: theme.palette.primary.dark,
-                                  }
-                                }}
-                              >
-                                Book This Flight
-                              </Button>
-                            </Box>
-                          </Box>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  ))}
-                </Grid>
-              </Box>
-            ) : (
-              <Box sx={{ textAlign: 'center', py: 4 }}>
-                <Typography variant="h6" color="text.secondary">
-                  No AI recommendations available
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Try searching for flights first to get AI recommendations
-                </Typography>
-              </Box>
-            )}
-          </DialogContent>
-          
-          <DialogActions sx={{ p: 2 }}>
-            <Button 
-              onClick={() => setAiDialogOpen(false)}
-              sx={{ color: theme.palette.text.secondary }}
-            >
-              Close
-            </Button>
-          </DialogActions>
-        </Dialog>
+        <AiFlightRecommender
+        open={aiDialogOpen}
+        onClose={() => setAiDialogOpen(false)}
+        flights={flights}
+        source={searchSource}
+        destination={searchDestination}
+        departureDate={searchDate}
+      />
       </Box>
     </LocalizationProvider>
   );
