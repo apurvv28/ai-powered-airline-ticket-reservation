@@ -22,7 +22,7 @@ const cacheDir = path.join(__dirname, 'cache');
 
 // Configure CORS
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  origin: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
@@ -490,14 +490,11 @@ app.post("/api/airlines/register", async (req, res) => {
     const password = airlineCode + randomNumber;
     const username = `${airlineName.replace(/\s+/g, '').toLowerCase()}@skywings`;
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Save credentials
+    // Save credentials with plain text password
     const credential = new AirlineCredential({
       airlineId: savedAirline._id,
       username,
-      password: hashedPassword
+      password // Store plain password directly
     });
 
     await credential.save();
@@ -537,9 +534,8 @@ app.post("/api/airlines/login", async (req, res) => {
       return res.status(401).json({ message: "Airline account is deactivated" });
     }
 
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, credential.password);
-    if (!isValidPassword) {
+    // Verify password (plain text comparison)
+    if (password !== credential.password) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 

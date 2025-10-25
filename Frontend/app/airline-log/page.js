@@ -51,11 +51,9 @@ export default function AirlineLoginPage() {
       const response = await fetch("http://localhost:5000/api/airlines/login", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "Access-Control-Allow-Origin": "*"
+          "Content-Type": "application/json"
         },
-        mode: "cors",
+        credentials: "include",
         body: JSON.stringify(formData)
       });
 

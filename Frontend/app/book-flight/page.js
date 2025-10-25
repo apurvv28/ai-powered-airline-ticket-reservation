@@ -259,32 +259,85 @@ export default function BookFlightPage() {
     setPaymentDialog(true);
 
     try {
-      // Process payment immediately
-      const paymentId = `pay_${Date.now()}`;
-
-      const response = await fetch(`http://localhost:5000/api/bookings/${booking.booking._id}/payment`, {
-        method: 'PUT',
+      // Create Razorpay order first
+      const orderResponse = await fetch('http://localhost:5000/api/create-order', {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          paymentId,
-          paymentStatus: 'completed'
+          amount: calculateTotal() * 100, // Razorpay expects amount in paisa
+          currency: 'INR',
+          bookingId: booking.booking.bookingId
         }),
       });
 
-      const data = await response.json();
+      const orderData = await orderResponse.json();
 
-      if (response.ok) {
-        setSuccess('Payment successful! Booking confirmed.');
-        setPaymentDialog(false);
-        // Redirect to confirmation page or show success message
-        setTimeout(() => {
-          router.push('/bookings');
-        }, 3000);
-      } else {
-        throw new Error(data.message || 'Failed to process payment');
+      if (!orderResponse.ok) {
+        throw new Error(orderData.message || 'Failed to create order');
       }
+
+      // Razorpay options
+      const options = {
+        key: 'rzp_test_your_key_here', // Replace with your test key
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: 'Airline Reservation System',
+        description: `Flight Booking - ${flight.flightNumber}`,
+        order_id: orderData.id,
+        handler: async function (response) {
+          // Payment successful
+          try {
+            const verifyResponse = await fetch(`http://localhost:5000/api/bookings/${booking.booking._id}/payment`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                paymentId: response.razorpay_payment_id,
+                orderId: response.razorpay_order_id,
+                signature: response.razorpay_signature,
+                paymentStatus: 'completed'
+              }),
+            });
+
+            const verifyData = await verifyResponse.json();
+
+            if (verifyResponse.ok) {
+              setSuccess('Payment successful! Booking confirmed.');
+              setPaymentDialog(false);
+              setTimeout(() => {
+                router.push('/bookings');
+              }, 3000);
+            } else {
+              throw new Error(verifyData.message || 'Payment verification failed');
+            }
+          } catch (err) {
+            setErrors({ payment: err.message });
+            setPaymentLoading(false);
+            setPaymentDialog(false);
+          }
+        },
+        prefill: {
+          name: `${passengerDetails.firstName} ${passengerDetails.lastName}`,
+          email: passengerDetails.email,
+          contact: passengerDetails.phone,
+        },
+        theme: {
+          color: '#1976d2',
+        },
+        modal: {
+          ondismiss: function() {
+            setPaymentLoading(false);
+            setPaymentDialog(false);
+          }
+        }
+      };
+
+      // Initialize Razorpay
+      const rzp = new window.Razorpay(options);
+      rzp.open();
 
     } catch (err) {
       setErrors({ payment: err.message });
