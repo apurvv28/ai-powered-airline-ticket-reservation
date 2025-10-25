@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   TextField,
@@ -31,6 +32,7 @@ import AiFlightRecommender from '../components/AiFlightRecommender';
 
 export default function SearchFlightsPage() {
   const theme = useTheme();
+  const router = useRouter();
   const [flights, setFlights] = useState([]);
   const [searchSource, setSearchSource] = useState("");
   const [searchDestination, setSearchDestination] = useState("");
@@ -832,10 +834,16 @@ export default function SearchFlightsPage() {
                                           <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.2, mb: 1 }}>
                                             {flight.class || 'Economy'} • {flight.availableSeats || 0} seats
                                           </Typography>
-                                          <Button 
-                                            variant="contained" 
+                                          <Button
+                                            variant="contained"
                                             size="small"
                                             disabled={!isAvailable}
+                                            onClick={() => {
+                                              if (isAvailable) {
+                                                localStorage.setItem('selectedFlight', JSON.stringify(flight));
+                                                router.push(`/book-flight?flightId=${flight._id}`);
+                                              }
+                                            }}
                                             sx={{
                                               borderRadius: 2,
                                               textTransform: 'none',
@@ -848,7 +856,7 @@ export default function SearchFlightsPage() {
                                               } : {}
                                             }}
                                           >
-                                            {isAvailable ? 'Select Flight' : 'Not Available'}
+                                            {isAvailable ? 'Book Now' : 'Not Available'}
                                           </Button>
                                         </Box>
                                       </Box>

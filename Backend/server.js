@@ -5,6 +5,14 @@ const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
 const bcrypt = require("bcryptjs");
+const Razorpay = require('razorpay');
+const crypto = require('crypto');
+
+// Initialize Razorpay
+const razorpay = new Razorpay({
+  key_id: 'rzp_test_your_key_here', // Replace with your test key
+  key_secret: 'your_secret_here' // Replace with your test secret
+});
 
 const app = express();
 const port = 5000;
@@ -73,8 +81,13 @@ const flightSchema = new mongoose.Schema({
   stops: Number,
   class: String,
   price: Number,
-  totalSeats: Number,
+  totalSeats: { type: Number, max: 400 }, // Maximum 400 seats
   availableSeats: Number,
+  seatMatrix: {
+    rows: { type: Number, default: 40 }, // Default 40 rows
+    columns: { type: Number, default: 10 }, // Default 10 seats per row (A-J)
+    occupiedSeats: [{ type: String }], // Array of occupied seats (e.g., ["1A", "2B"])
+  },
   operatingDays: [String],
   isActive: { type: Boolean, default: true },
   discount: {
@@ -103,6 +116,63 @@ const userSchema = new mongoose.Schema({
 
 // Ensure the collection name matches existing usage (if any)
 const User = mongoose.model('User', userSchema, 'users');
+
+// Passenger Schema
+const passengerSchema = new mongoose.Schema({
+  firstName: { type: String, required: true },
+  lastName: { type: String, required: true },
+  email: { type: String, required: true },
+  phone: { type: String, required: true },
+  dateOfBirth: { type: Date, required: true },
+  gender: { type: String, required: true, enum: ['Male', 'Female', 'Other'] },
+  passportNumber: { type: String },
+  nationality: { type: String },
+}, { timestamps: true });
+
+const Passenger = mongoose.model('Passenger', passengerSchema, 'passengers');
+
+// Insurance Schema
+const insuranceSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  description: { type: String, required: true },
+  coverage: { type: String, required: true },
+  price: { type: Number, required: true },
+  isActive: { type: Boolean, default: true },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const Insurance = mongoose.model('Insurance', insuranceSchema, 'insurances');
+
+// Booking Schema
+const bookingSchema = new mongoose.Schema({
+  bookingId: { type: String, required: true, unique: true },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  flightId: { type: mongoose.Schema.Types.ObjectId, ref: 'Flight', required: true },
+  passengerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Passenger', required: true },
+  insuranceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Insurance' },
+  bookingDate: { type: Date, default: Date.now },
+  travelDate: { type: Date, required: true },
+  status: {
+    type: String,
+    enum: ['pending', 'confirmed', 'cancelled', 'refunded'],
+    default: 'pending'
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['pending', 'completed', 'failed', 'refunded'],
+    default: 'pending'
+  },
+  paymentId: { type: String },
+  totalAmount: { type: Number, required: true },
+  flightAmount: { type: Number, required: true },
+  insuranceAmount: { type: Number, default: 0 },
+  seatNumber: { type: String },
+  specialRequests: { type: String },
+  contactEmail: { type: String, required: true },
+  contactPhone: { type: String, required: true },
+}, { timestamps: true });
+
+const Booking = mongoose.model('Booking', bookingSchema, 'bookings');
 
 // Updated /flights endpoint with proper operating days filtering
 app.get("/flights", async (req, res) => {
@@ -293,6 +363,82 @@ function calculateArrivalDate(departureDate, departureTime, arrivalTime, duratio
   return arrivalDate;
 }
 
+// Helper function to generate a seat matrix
+function generateSeatMatrix(rows, columns) {
+  const availableSeats = [];
+  const columnLetters = 'ABCDEFGHIJ'; // Extended to 10 columns (A-J)
+  
+  for (let row = 1; row <= rows; row++) {
+    for (let col = 0; col < columns; col++) {
+      availableSeats.push(`${row}${columnLetters[col]}`);
+    }
+  }
+  
+  return availableSeats;
+}
+
+// Helper function to validate flight capacity
+async function validateFlightCapacity(flight) {
+  if (!flight.totalSeats || flight.totalSeats > 400) {
+    throw new Error('Invalid total seats configuration. Maximum allowed is 400 seats.');
+  }
+
+  // Ensure seatMatrix configuration matches totalSeats
+  const maxSeats = flight.seatMatrix.rows * flight.seatMatrix.columns;
+  if (maxSeats < flight.totalSeats) {
+    // Adjust seat matrix if needed
+    flight.seatMatrix.rows = Math.ceil(flight.totalSeats / 10); // 10 seats per row
+    flight.seatMatrix.columns = 10;
+  }
+
+  // Update availableSeats count
+  flight.availableSeats = flight.totalSeats - flight.seatMatrix.occupiedSeats.length;
+  await flight.save();
+  
+  return flight;
+}
+
+// Helper function to get random available seat
+async function getRandomAvailableSeat(flight) {
+  // Validate flight capacity first
+  await validateFlightCapacity(flight);
+  
+  const allPossibleSeats = generateSeatMatrix(flight.seatMatrix.rows, flight.seatMatrix.columns)
+    .slice(0, flight.totalSeats); // Only use seats up to totalSeats
+  const availableSeats = allPossibleSeats.filter(seat => !flight.seatMatrix.occupiedSeats.includes(seat));
+  
+  if (availableSeats.length === 0) {
+    throw new Error('No seats available on this flight');
+  }
+  
+  const randomIndex = Math.floor(Math.random() * availableSeats.length);
+  return availableSeats[randomIndex];
+}
+
+// Helper function to assign seat to booking
+async function assignSeatToBooking(flightId, bookingId) {
+  const flight = await Flight.findById(flightId);
+  if (!flight) {
+    throw new Error('Flight not found');
+  }
+
+  if (flight.availableSeats <= 0) {
+    throw new Error('No seats available on this flight');
+  }
+
+  const randomSeat = await getRandomAvailableSeat(flight);
+  
+  // Update flight's occupied seats and available seats count
+  flight.seatMatrix.occupiedSeats.push(randomSeat);
+  flight.availableSeats -= 1;
+  await flight.save();
+  
+  // Update booking with seat number
+  await Booking.findByIdAndUpdate(bookingId, { seatNumber: randomSeat });
+  
+  return randomSeat;
+}
+
 // Helper function to generate airline code
 function generateAirlineCode(airlineName) {
   const words = airlineName.split(' ');
@@ -436,13 +582,40 @@ app.post("/api/airlines/:airlineId/flights", async (req, res) => {
       return res.status(404).json({ message: "Airline not found" });
     }
 
+    // Validate total seats
+    if (!flightData.totalSeats || flightData.totalSeats > 400) {
+      return res.status(400).json({ 
+        message: 'Invalid total seats. Maximum allowed is 400 seats.'
+      });
+    }
+
+    // Calculate required rows based on total seats (10 seats per row)
+    const requiredRows = Math.ceil(flightData.totalSeats / 10);
+    
+    // Set seat matrix configuration
+    const seatMatrix = {
+      rows: requiredRows,
+      columns: 10,
+      occupiedSeats: []
+    };
+
     const flight = new Flight({
       ...flightData,
       airlineId,
-      airline: airline.airlineName
+      airline: airline.airlineName,
+      seatMatrix,
+      availableSeats: flightData.totalSeats // Initialize available seats
     });
 
-    const newFlight = await flight.save();
+    // Validate and save the flight
+    try {
+      await validateFlightCapacity(flight);
+      const newFlight = await flight.save();
+      res.status(201).json(newFlight);
+    } catch (err) {
+      console.error("Error creating flight:", err);
+      res.status(500).json({ message: err.message });
+    }
     res.status(201).json(newFlight);
 
   } catch (err) {
@@ -550,6 +723,312 @@ app.post('/users/login', async (req, res) => {
 
     res.json({ message: 'Login successful', user: safeUser });
   } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Get all insurances
+app.get("/api/insurances", async (req, res) => {
+  try {
+    const insurances = await Insurance.find({ isActive: true });
+    res.json(insurances);
+  } catch (err) {
+    console.error("Error fetching insurances:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Create booking
+app.post("/api/bookings", async (req, res) => {
+  try {
+    const {
+      flightId,
+      passengerDetails,
+      insuranceId,
+      travelDate,
+      contactEmail,
+      contactPhone,
+      specialRequests
+    } = req.body;
+
+    // Validate required fields
+    if (!flightId || !passengerDetails || !travelDate || !contactEmail || !contactPhone) {
+      return res.status(400).json({ message: "Missing required booking information" });
+    }
+
+    // Validate insurance if provided
+    if (insuranceId) {
+      const insurance = await Insurance.findById(insuranceId);
+      if (!insurance || !insurance.isActive) {
+        return res.status(400).json({ message: "Invalid or inactive insurance selected" });
+      }
+    }
+
+    // Check if flight exists and has available seats
+    const flight = await Flight.findById(flightId);
+    if (!flight) {
+      return res.status(404).json({ message: "Flight not found" });
+    }
+
+    if (flight.availableSeats <= 0) {
+      return res.status(400).json({ message: "No seats available for this flight" });
+    }
+
+    // Create passenger
+    const passenger = new Passenger(passengerDetails);
+    const savedPassenger = await passenger.save();
+
+    // Calculate amounts
+    let insuranceAmount = 0;
+    let insurance = null;
+    if (insuranceId) {
+      insurance = await Insurance.findById(insuranceId);
+      if (insurance) {
+        insuranceAmount = insurance.price;
+      }
+    }
+
+    const flightAmount = flight.discount?.hasDiscount
+      ? (flight.discount.discountType === "percentage"
+          ? flight.price * (1 - flight.discount.discountValue / 100)
+          : Math.max(0, flight.price - flight.discount.discountValue))
+      : flight.price;
+
+    const totalAmount = flightAmount + insuranceAmount;
+
+    // Generate unique booking ID
+    const bookingId = `BK${Date.now()}${Math.floor(Math.random() * 1000)}`;
+
+    // Create booking
+    const booking = new Booking({
+      bookingId,
+      userId: req.body.userId, // Add userId from request body
+      flightId,
+      passengerId: savedPassenger._id,
+      insuranceId: insurance?._id,
+      travelDate: new Date(travelDate),
+      totalAmount,
+      flightAmount,
+      insuranceAmount,
+      contactEmail,
+      contactPhone,
+      specialRequests,
+      status: 'pending',
+      paymentStatus: 'pending'
+    });
+
+    const savedBooking = await booking.save();
+
+    // Update flight available seats
+    await Flight.findByIdAndUpdate(flightId, {
+      $inc: { availableSeats: -1 }
+    });
+
+    res.status(201).json({
+      message: "Booking created successfully",
+      booking: savedBooking,
+      passenger: savedPassenger,
+      flight,
+      insurance,
+      totalAmount
+    });
+
+  } catch (err) {
+    console.error("Error creating booking:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Create Razorpay order
+app.post("/api/create-order", async (req, res) => {
+  try {
+    const { amount, currency, bookingId } = req.body;
+
+    const order = await razorpay.orders.create({
+      amount: amount,
+      currency: currency,
+      receipt: bookingId,
+      notes: {
+        bookingId: bookingId
+      }
+    });
+
+    res.json(order);
+  } catch (err) {
+    console.error("Error creating order:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Process payment and confirm booking
+app.put("/api/bookings/:bookingId/payment", async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const { paymentId, orderId, signature, paymentStatus } = req.body;
+
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    // Check for valid payment status
+    if (!['pending', 'confirmed'].includes(booking.status)) {
+      return res.status(400).json({ 
+        message: `Cannot process payment for booking with status: ${booking.status}. Only pending or confirmed bookings can be processed.`
+      });
+    }
+
+    // Verify Razorpay signature
+    const secret = 'your_webhook_secret'; // Replace with your webhook secret
+    const expectedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(orderId + "|" + paymentId)
+      .digest('hex');
+
+    if (expectedSignature !== signature) {
+      return res.status(400).json({ message: "Invalid payment signature" });
+    }
+
+    // Update booking with payment info
+    booking.paymentId = paymentId;
+    booking.paymentStatus = paymentStatus;
+
+    if (paymentStatus === 'completed') {
+      booking.status = 'confirmed';
+      
+      try {
+        // Assign a random seat to the booking
+        const assignedSeat = await assignSeatToBooking(booking.flightId, booking._id);
+        booking.seatNumber = assignedSeat;
+      } catch (error) {
+        console.error('Error assigning seat:', error);
+        return res.status(400).json({ message: error.message });
+      }
+    } else if (paymentStatus === 'failed') {
+      booking.status = 'cancelled';
+      // Restore seat availability
+      await Flight.findByIdAndUpdate(booking.flightId, {
+        $inc: { availableSeats: 1 }
+      });
+    }
+
+    await booking.save();
+
+    res.json({
+      message: "Payment processed successfully",
+      booking
+    });
+
+    // Update booking with payment info
+    booking.paymentId = paymentId;
+    booking.paymentStatus = paymentStatus;
+
+    if (paymentStatus === 'completed') {
+      booking.status = 'confirmed';
+      
+      try {
+        // Assign a random seat to the booking
+        const assignedSeat = await assignSeatToBooking(booking.flightId, booking._id);
+        booking.seatNumber = assignedSeat;
+      } catch (error) {
+        console.error('Error assigning seat:', error);
+        return res.status(400).json({ message: error.message });
+      }
+    } else if (paymentStatus === 'failed') {
+      booking.status = 'cancelled';
+      // Restore seat availability
+      await Flight.findByIdAndUpdate(booking.flightId, {
+        $inc: { availableSeats: 1 }
+      });
+    }
+
+    await booking.save();
+
+    res.json({
+      message: "Payment processed successfully",
+      booking
+    });
+
+  } catch (err) {
+    console.error("Error processing payment:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Get bookings for a specific user
+app.get("/api/users/:userId/bookings", async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Find all bookings for this user
+    const bookings = await Booking.find({ userId })
+      .populate('flightId')
+      .populate('passengerId')
+      .populate('insuranceId')
+      .sort({ createdAt: -1 });
+
+    res.json(bookings);
+  } catch (err) {
+    console.error("Error fetching user bookings:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Get bookings for airline dashboard
+app.get("/api/bookings/:airlineId", async (req, res) => {
+  try {
+    const { airlineId } = req.params;
+
+    // Find all flights for this airline
+    const flights = await Flight.find({ airlineId });
+    const flightIds = flights.map(f => f._id);
+
+    // Find bookings for these flights
+    const bookings = await Booking.find({ flightId: { $in: flightIds } })
+      .populate('flightId')
+      .populate('passengerId')
+      .populate('insuranceId')
+      .sort({ createdAt: -1 });
+
+    res.json(bookings);
+  } catch (err) {
+    console.error("Error fetching bookings:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Seed insurances data (run once to populate database)
+app.post("/api/insurances/seed", async (req, res) => {
+  try {
+    const insurances = [
+      {
+        name: "Basic Travel Insurance",
+        description: "Essential coverage for trip cancellations and medical emergencies",
+        coverage: "Trip cancellation, medical expenses up to $50,000, lost baggage",
+        price: 25
+      },
+      {
+        name: "Premium Travel Insurance",
+        description: "Comprehensive coverage including COVID-19 protection",
+        coverage: "Trip cancellation, medical expenses up to $100,000, lost baggage, COVID-19 coverage, trip delays",
+        price: 50
+      },
+      {
+        name: "Gold Travel Insurance",
+        description: "Ultimate protection with worldwide coverage",
+        coverage: "Trip cancellation, medical expenses up to $200,000, lost baggage, COVID-19 coverage, trip delays, adventure sports",
+        price: 75
+      }
+    ];
+
+    const savedInsurances = await Insurance.insertMany(insurances);
+    res.status(201).json({
+      message: "Insurance options seeded successfully",
+      insurances: savedInsurances
+    });
+
+  } catch (err) {
+    console.error("Error seeding insurances:", err);
     res.status(500).json({ message: err.message });
   }
 });

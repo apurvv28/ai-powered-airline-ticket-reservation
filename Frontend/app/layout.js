@@ -7,6 +7,7 @@ import Navbar from "./components/navbar";
 import Footer from "./components/footer";
 import theme from "./theme/theme";
 import { usePathname } from "next/navigation";
+import Script from 'next/script';
 
 export default function RootLayout({ children }) {
   const pathname = usePathname();
@@ -28,6 +29,7 @@ export default function RootLayout({ children }) {
         <title>SkyWings Airlines - AI Powered Flight Booking</title>
         <meta name="description" content="Experience the future of air travel with SkyWings AI-powered flight reservation system" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="beforeInteractive" />
       </head>
       <body style={{ margin: 0, padding: 0, minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
         <ThemeProvider theme={theme}>
