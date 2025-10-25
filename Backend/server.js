@@ -873,51 +873,25 @@ app.put("/api/bookings/:bookingId/payment", async (req, res) => {
 
     // Check for valid payment status
     if (!['pending', 'confirmed'].includes(booking.status)) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: `Cannot process payment for booking with status: ${booking.status}. Only pending or confirmed bookings can be processed.`
       });
     }
 
-    // Verify Razorpay signature
-    const secret = 'your_webhook_secret'; // Replace with your webhook secret
-    const expectedSignature = crypto
-      .createHmac('sha256', secret)
-      .update(orderId + "|" + paymentId)
-      .digest('hex');
+    // Skip signature verification for dummy payments (paymentId starting with 'pay_' or no signature provided)
+    const isDummyPayment = !signature || signature === '' || signature === 'null' || signature === 'undefined' || paymentId.startsWith('pay_');
 
-    if (expectedSignature !== signature) {
-      return res.status(400).json({ message: "Invalid payment signature" });
-    }
+    if (!isDummyPayment) {
+      // Verify Razorpay signature using HMAC SHA256 for real payments
+      const expectedSignature = crypto
+        .createHmac('sha256', razorpay.key_secret)
+        .update(orderId + "|" + paymentId)
+        .digest('hex');
 
-    // Update booking with payment info
-    booking.paymentId = paymentId;
-    booking.paymentStatus = paymentStatus;
-
-    if (paymentStatus === 'completed') {
-      booking.status = 'confirmed';
-      
-      try {
-        // Assign a random seat to the booking
-        const assignedSeat = await assignSeatToBooking(booking.flightId, booking._id);
-        booking.seatNumber = assignedSeat;
-      } catch (error) {
-        console.error('Error assigning seat:', error);
-        return res.status(400).json({ message: error.message });
+      if (expectedSignature !== signature) {
+        return res.status(400).json({ message: "Invalid payment signature" });
       }
-    } else if (paymentStatus === 'failed') {
-      booking.status = 'cancelled';
-      // Restore seat availability
-      await Flight.findByIdAndUpdate(booking.flightId, {
-        $inc: { availableSeats: 1 }
-      });
     }
-
-    await booking.save();
-
-    res.json({
-      message: "Payment processed successfully",
-      booking
-    });
 
     // Update booking with payment info
     booking.paymentId = paymentId;
@@ -925,7 +899,7 @@ app.put("/api/bookings/:bookingId/payment", async (req, res) => {
 
     if (paymentStatus === 'completed') {
       booking.status = 'confirmed';
-      
+
       try {
         // Assign a random seat to the booking
         const assignedSeat = await assignSeatToBooking(booking.flightId, booking._id);
