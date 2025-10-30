@@ -661,7 +661,7 @@ export default function SearchFlightsPage() {
                                 >
                                   <Card
                                     sx={{
-                                      width: '100%',
+                                      width: '63vw',
                                       borderRadius: 3,
                                       boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
                                       transition: 'all 0.3s ease',

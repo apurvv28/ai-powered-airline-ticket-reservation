@@ -1,17 +1,19 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
+  Container,
+  Typography,
+  Stepper,
+  Step,
+  StepLabel,
+  Button,
+  TextField,
+  Grid,
   Box,
   Paper,
-  Typography,
-  Button,
-  Container,
-  Grid,
   Card,
-  CardContent,
-  TextField,
   FormControl,
   InputLabel,
   Select,
@@ -19,27 +21,25 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
-  Checkbox,
-  Stepper,
-  Step,
-  StepLabel,
   Alert,
-  CircularProgress,
-  useTheme,
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions,
-  Chip
-} from "@mui/material";
-import { motion } from "framer-motion";
+  CircularProgress,
+} from '@mui/material';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { useTheme } from '@mui/material/styles';
+import { motion } from 'framer-motion';
+
+// Icons
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PersonIcon from '@mui/icons-material/Person';
 import SecurityIcon from '@mui/icons-material/Security';
 import PaymentIcon from '@mui/icons-material/Payment';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import { LocalizationProvider, DatePicker } from "@mui/x-date-pickers";
-import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import FlightIcon from '@mui/icons-material/Flight';
+import ContactMailIcon from '@mui/icons-material/ContactMail';
 
 const steps = ['Passenger Details', 'Insurance & Review', 'Payment'];
 
@@ -79,13 +79,6 @@ export default function BookFlightPage() {
   const [errors, setErrors] = useState({});
   const [success, setSuccess] = useState('');
 
-  useEffect(() => {
-    if (flightId) {
-      fetchFlightDetails();
-      fetchInsurances();
-    }
-  }, [flightId]);
-
   const fetchFlightDetails = useCallback(async () => {
     try {
       // For now, we'll get flight details from localStorage or URL params
@@ -108,12 +101,23 @@ export default function BookFlightPage() {
   const fetchInsurances = useCallback(async () => {
     try {
       const response = await fetch('http://localhost:5000/api/insurances');
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`HTTP ${response.status}: ${text}`);
+      }
       const data = await response.json();
       setInsurances(data);
     } catch (err) {
       console.error('Error fetching insurances:', err);
     }
   }, []);
+
+  useEffect(() => {
+    if (flightId) {
+      fetchFlightDetails();
+      fetchInsurances();
+    }
+  }, [flightId, fetchFlightDetails, fetchInsurances]);
 
   const validatePassengerDetails = () => {
     const newErrors = {};
@@ -210,8 +214,7 @@ export default function BookFlightPage() {
       if (insurances.length > 0 && selectedInsurance) {
         const selectedInsuranceDetails = insurances.find(i => i._id === selectedInsurance);
         if (!selectedInsuranceDetails) {
-          setErrors(prev => ({ ...prev, insurance: 'Invalid insurance selection' }));
-          return;
+          throw new Error('Selected insurance not found');
         }
       }
 
@@ -236,11 +239,12 @@ export default function BookFlightPage() {
         body: JSON.stringify(bookingData),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to create booking');
+        const text = await response.text();
+        throw new Error(`HTTP ${response.status}: ${text}`);
       }
+
+      const data = await response.json();
 
       setBooking(data);
       setActiveStep(2); // Move to payment step
@@ -259,86 +263,30 @@ export default function BookFlightPage() {
     setPaymentDialog(true);
 
     try {
-      // Create Razorpay order first
-      const orderResponse = await fetch('http://localhost:5000/api/create-order', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          amount: calculateTotal() * 100, // Razorpay expects amount in paisa
-          currency: 'INR',
-          bookingId: booking.booking.bookingId
-        }),
-      });
+      // Simulate payment processing with 4-5 second delay
+      setTimeout(async () => {
+        // After delay, call the payment confirmation endpoint
+        const paymentResponse = await fetch(`http://localhost:5000/api/bookings/${booking.booking._id}/payment`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            paymentId: `pay_sim_${Date.now()}`,
+            orderId: `order_sim_${Date.now()}`,
+            paymentStatus: 'completed'
+          }),
+        });
 
-      const orderData = await orderResponse.json();
-
-      if (!orderResponse.ok) {
-        throw new Error(orderData.message || 'Failed to create order');
-      }
-
-      // Razorpay options
-      const options = {
-        key: 'rzp_test_your_key_here', // Replace with your test key
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: 'Airline Reservation System',
-        description: `Flight Booking - ${flight.flightNumber}`,
-        order_id: orderData.id,
-        handler: async function (response) {
-          // Payment successful
-          try {
-            const verifyResponse = await fetch(`http://localhost:5000/api/bookings/${booking.booking._id}/payment`, {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                paymentId: response.razorpay_payment_id,
-                orderId: response.razorpay_order_id,
-                signature: response.razorpay_signature,
-                paymentStatus: 'completed'
-              }),
-            });
-
-            const verifyData = await verifyResponse.json();
-
-            if (verifyResponse.ok) {
-              setSuccess('Payment successful! Booking confirmed.');
-              setPaymentDialog(false);
-              setTimeout(() => {
-                router.push('/bookings');
-              }, 3000);
-            } else {
-              throw new Error(verifyData.message || 'Payment verification failed');
-            }
-          } catch (err) {
-            setErrors({ payment: err.message });
-            setPaymentLoading(false);
-            setPaymentDialog(false);
-          }
-        },
-        prefill: {
-          name: `${passengerDetails.firstName} ${passengerDetails.lastName}`,
-          email: passengerDetails.email,
-          contact: passengerDetails.phone,
-        },
-        theme: {
-          color: '#1976d2',
-        },
-        modal: {
-          ondismiss: function() {
-            setPaymentLoading(false);
-            setPaymentDialog(false);
-          }
+        if (!paymentResponse.ok) {
+          const text = await paymentResponse.text();
+          throw new Error(`HTTP ${paymentResponse.status}: ${text}`);
         }
-      };
 
-      // Initialize Razorpay
-      const rzp = new window.Razorpay(options);
-      rzp.open();
-
+        setSuccess('Payment processed successfully! Your booking is confirmed.');
+        setPaymentDialog(false);
+        router.push('/bookings');
+      }, 4500); // 4.5 seconds delay
     } catch (err) {
       setErrors({ payment: err.message });
       setPaymentLoading(false);
@@ -435,15 +383,14 @@ export default function BookFlightPage() {
                     label="Date of Birth"
                     value={passengerDetails.dateOfBirth}
                     onChange={(date) => handlePassengerChange('dateOfBirth', date)}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        fullWidth
-                        error={!!errors.dateOfBirth}
-                        helperText={errors.dateOfBirth}
-                        required
-                      />
-                    )}
+                    slotProps={{
+                      textField: {
+                        fullWidth: true,
+                        error: !!errors.dateOfBirth,
+                        helperText: errors.dateOfBirth,
+                        required: true
+                      }
+                    }}
                   />
                 </LocalizationProvider>
               </Grid>
@@ -489,136 +436,141 @@ export default function BookFlightPage() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <Grid container spacing={4}>
-                {/* Insurance Selection */}
-              <Grid item xs={12} md={6}>
-                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <SecurityIcon /> Travel Insurance (Optional)
-                </Typography>
+            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <SecurityIcon /> Insurance Options
+            </Typography>
 
-                <FormControl component="fieldset" fullWidth error={!!errors.insurance}>
-                  <RadioGroup
-                    value={selectedInsurance}
-                    onChange={(e) => {
-                      setSelectedInsurance(e.target.value);
-                      setErrors((prev) => ({ ...prev, insurance: '' }));
-                    }}
-                  >
-                    <FormControlLabel
-                      value=""
-                      control={<Radio />}
-                      label={
-                        <Box>
-                          <Typography variant="subtitle1">No insurance</Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Continue without travel insurance coverage
-                          </Typography>
-                        </Box>
-                      }
-                    />
+            <Box sx={{ mb: 4 }}>
+              <FormControl component="fieldset">
+                <RadioGroup
+                  value={selectedInsurance}
+                  onChange={(e) => setSelectedInsurance(e.target.value)}
+                >
+                  <Grid container spacing={2}>
                     {insurances.map((insurance) => (
-                      <Card key={insurance._id} sx={{ mb: 2, border: selectedInsurance === insurance._id ? 2 : 1, borderColor: selectedInsurance === insurance._id ? 'primary.main' : 'grey.300' }}>
-                        <CardContent sx={{ pb: '16px !important' }}>
+                      <Grid item xs={12} key={insurance._id}>
+                        <Paper sx={{ p: 2 }}>
                           <FormControlLabel
                             value={insurance._id}
                             control={<Radio />}
                             label={
                               <Box>
-                                <Typography variant="h6">{insurance.name}</Typography>
-                                <Typography variant="body2" color="text.secondary">{insurance.description}</Typography>
-                                <Typography variant="caption" display="block">{insurance.coverage}</Typography>
-                                <Typography variant="h6" color="primary" sx={{ mt: 1 }}>${insurance.price}</Typography>
+                                <Typography variant="subtitle1">
+                                  {insurance.name} - ₹{insurance.price}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  {insurance.description}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  Coverage: {insurance.coverage}
+                                </Typography>
                               </Box>
                             }
-                            sx={{ width: '100%', alignItems: 'flex-start' }}
                           />
-                        </CardContent>
-                      </Card>
+                        </Paper>
+                      </Grid>
                     ))}
-                  </RadioGroup>
-                </FormControl>
+                    <Grid item xs={12}>
+                      <Paper sx={{ p: 2 }}>
+                        <FormControlLabel
+                          value=""
+                          control={<Radio />}
+                          label="No insurance"
+                        />
+                      </Paper>
+                    </Grid>
+                  </Grid>
+                </RadioGroup>
+              </FormControl>
+            </Box>
+
+            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 4 }}>
+              <ContactMailIcon /> Contact Details
+            </Typography>
+
+            <Grid container spacing={3}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Contact Email"
+                  type="email"
+                  value={contactDetails.email}
+                  onChange={(e) => handleContactChange('email', e.target.value)}
+                  error={!!errors.contactEmail}
+                  helperText={errors.contactEmail}
+                  required
+                />
               </Grid>
-
-              {/* Contact Details & Summary */}
-              <Grid item xs={12} md={6}>
-                <Typography variant="h6" gutterBottom>Contact Details</Typography>
-
-                <Grid container spacing={2}>
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      label="Contact Email"
-                      type="email"
-                      value={contactDetails.email}
-                      onChange={(e) => handleContactChange('email', e.target.value)}
-                      error={!!errors.contactEmail}
-                      helperText={errors.contactEmail}
-                      required
-                    />
-                  </Grid>
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      label="Contact Phone"
-                      value={contactDetails.phone}
-                      onChange={(e) => handleContactChange('phone', e.target.value)}
-                      error={!!errors.contactPhone}
-                      helperText={errors.contactPhone}
-                      required
-                    />
-                  </Grid>
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      label="Special Requests (Optional)"
-                      multiline
-                      rows={3}
-                      value={contactDetails.specialRequests}
-                      onChange={(e) => handleContactChange('specialRequests', e.target.value)}
-                      placeholder="Any special requirements or requests..."
-                    />
-                  </Grid>
-                </Grid>
-
-                    {/* Booking Summary */}
-                <Card sx={{ mt: 3 }}>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom>Booking Summary</Typography>
-
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                      <Typography>
-                        Flight ({flight.source} → {flight.destination})
-                        <Typography variant="caption" display="block" color="text.secondary">
-                          {flight.flightNumber}
-                        </Typography>
-                      </Typography>
-                      <Typography>${flight.price}</Typography>
-                    </Box>                    {flight.discount?.hasDiscount && (
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, color: 'success.main' }}>
-                        <Typography>Discount</Typography>
-                        <Typography>
-                          -${flight.discount.discountType === "percentage"
-                            ? (flight.price * flight.discount.discountValue / 100).toFixed(2)
-                            : flight.discount.discountValue}
-                        </Typography>
-                      </Box>
-                    )}
-
-                    {selectedInsurance && (
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography>Insurance</Typography>
-                        <Typography>${insurances.find(i => i._id === selectedInsurance)?.price || 0}</Typography>
-                      </Box>
-                    )}
-
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
-                      <Typography variant="h6">Total</Typography>
-                      <Typography variant="h6" color="primary">${calculateTotal().toFixed(2)}</Typography>
-                    </Box>
-                  </CardContent>
-                </Card>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Contact Phone"
+                  value={contactDetails.phone}
+                  onChange={(e) => handleContactChange('phone', e.target.value)}
+                  error={!!errors.contactPhone}
+                  helperText={errors.contactPhone}
+                  required
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Special Requests (Optional)"
+                  multiline
+                  rows={4}
+                  value={contactDetails.specialRequests}
+                  onChange={(e) => handleContactChange('specialRequests', e.target.value)}
+                />
               </Grid>
             </Grid>
+
+            <Box sx={{ mt: 4 }}>
+              <Typography variant="h6" gutterBottom>
+                Booking Summary
+              </Typography>
+              <Paper sx={{ p: 2 }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle1">
+                      Flight Details
+                    </Typography>
+                    <Typography variant="body2">
+                      {flight.airline} - {flight.flightNumber}
+                    </Typography>
+                    <Typography variant="body2">
+                      {flight.source} → {flight.destination}
+                    </Typography>
+                    <Typography variant="body2">
+                      Departure: {new Date(flight.calculatedDeparture.date).toLocaleDateString()} {flight.departure.time}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle1">
+                      Passenger
+                    </Typography>
+                    <Typography variant="body2">
+                      {passengerDetails.firstName} {passengerDetails.lastName}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle1">
+                      Price Breakdown
+                    </Typography>
+                    <Typography variant="body2">
+                      Flight Fare: ₹{flight.price}
+                    </Typography>
+                    {selectedInsurance && (
+                      <Typography variant="body2">
+                        Insurance: ₹{insurances.find(i => i._id === selectedInsurance)?.price || 0}
+                      </Typography>
+                    )}
+                    <Typography variant="subtitle1" sx={{ mt: 1 }}>
+                      Total Amount: ₹{calculateTotal()}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Paper>
+            </Box>
           </motion.div>
         );
 
@@ -629,34 +581,21 @@ export default function BookFlightPage() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <Box sx={{ textAlign: 'center' }}>
-              <PaymentIcon sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
-              <Typography variant="h6" gutterBottom>Complete Your Payment</Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-                Total Amount: ${calculateTotal().toFixed(2)}
+            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <PaymentIcon /> Payment
+            </Typography>
+
+            <Paper sx={{ p: 2, mb: 3 }}>
+              <Typography variant="subtitle1" gutterBottom>
+                Booking Reference: {booking?.booking.bookingId}
               </Typography>
-
-              {booking && (
-                <Card sx={{ maxWidth: 400, mx: 'auto', mb: 3 }}>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom>Booking Details</Typography>
-                    <Typography>Booking ID: {booking.booking.bookingId}</Typography>
-                    <Typography>Passenger: {passengerDetails.firstName} {passengerDetails.lastName}</Typography>
-                    <Typography>Flight: {flight.flightNumber}</Typography>
-                  </CardContent>
-                </Card>
-              )}
-
-              <Button
-                variant="contained"
-                size="large"
-                onClick={handlePayment}
-                disabled={paymentLoading}
-                sx={{ minWidth: 200 }}
-              >
-                {paymentLoading ? <CircularProgress size={24} /> : 'Pay Now'}
-              </Button>
-            </Box>
+              <Typography variant="body1" gutterBottom>
+                Total Amount to Pay: ₹{calculateTotal()}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Click &ldquo;Complete Payment&rdquo; to proceed with the payment.
+              </Typography>
+            </Paper>
           </motion.div>
         );
 

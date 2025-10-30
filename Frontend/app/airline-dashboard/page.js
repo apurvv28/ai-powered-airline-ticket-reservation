@@ -1,6 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import dynamic from 'next/dynamic';
+import PdfIcon from "@mui/icons-material/PictureAsPdf";
+import { useReactToPrint } from 'react-to-print';
+//const PassengerListPDF = dynamic(() => import("../components/PassengerListPDF"), { ssr: false });
 import { useRouter } from "next/navigation";
 import {
   Box,
@@ -38,21 +42,24 @@ import {
   TableRow,
   IconButton as MuiIconButton,
   Alert,
-  InputAdornment
+  InputAdornment,
 } from "@mui/material";
 import { motion } from "framer-motion";
-import LogoutIcon from '@mui/icons-material/Logout';
-import FlightIcon from '@mui/icons-material/Flight';
-import AddIcon from '@mui/icons-material/Add';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import CloseIcon from '@mui/icons-material/Close';
-import ScheduleIcon from '@mui/icons-material/Schedule';
-import DiscountIcon from '@mui/icons-material/Discount';
+import LogoutIcon from "@mui/icons-material/Logout";
+import FlightIcon from "@mui/icons-material/Flight";
+import AddIcon from "@mui/icons-material/Add";
+import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/Delete";
+import CloseIcon from "@mui/icons-material/Close";
+import ScheduleIcon from "@mui/icons-material/Schedule";
+import DiscountIcon from "@mui/icons-material/Discount";
+import PeopleIcon from "@mui/icons-material/People";
+import VisibilityIcon from "@mui/icons-material/Visibility";
 
 export default function AirlineDashboard() {
   const theme = useTheme();
   const router = useRouter();
+  const passengerListRef = useRef();
   const [airline, setAirline] = useState(null);
   const [flights, setFlights] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +67,10 @@ export default function AirlineDashboard() {
   const [editingFlight, setEditingFlight] = useState(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [passengersDialog, setPassengersDialog] = useState(false);
+  const [selectedFlight, setSelectedFlight] = useState(null);
+  const [passengers, setPassengers] = useState([]);
+  const [passengersLoading, setPassengersLoading] = useState(false);
 
   // Form state
   const [flightForm, setFlightForm] = useState({
@@ -81,10 +92,10 @@ export default function AirlineDashboard() {
       discountType: "percentage", // percentage or fixed
       discountValue: "",
       discountStartDate: "",
-      discountEndDate: ""
+      discountEndDate: "",
     },
     aircraftType: "",
-    baggageAllowance: ""
+    baggageAllowance: "",
   });
 
   const daysOfWeek = [
@@ -94,11 +105,28 @@ export default function AirlineDashboard() {
     { value: "wed", label: "Wednesday" },
     { value: "thu", label: "Thursday" },
     { value: "fri", label: "Friday" },
-    { value: "sat", label: "Saturday" }
+    { value: "sat", label: "Saturday" },
   ];
 
-  const flightClasses = ["Economy", "Premium Economy", "Business", "First Class"];
-  const aircraftTypes = ["Boeing 737", "Boeing 747", "Airbus A320", "Airbus A380", "Embraer E190", "Bombardier CRJ"];
+  const flightClasses = [
+    "Economy",
+    "Premium Economy",
+    "Business",
+    "First Class",
+  ];
+  const aircraftTypes = [
+    "Boeing 737",
+    "Boeing 747",
+    "Airbus A320",
+    "Airbus A380",
+    "Embraer E190",
+    "Bombardier CRJ",
+  ];
+
+  const handleExportPDF = () => {
+    if (!selectedFlight) return;
+    generatePassengerListPDF(selectedFlight, passengers);
+  };
 
   useEffect(() => {
     const airlineData = localStorage.getItem("airline");
@@ -106,14 +134,16 @@ export default function AirlineDashboard() {
       router.push("/airline-log");
       return;
     }
-    
+
     setAirline(JSON.parse(airlineData));
     fetchFlights(JSON.parse(airlineData)._id);
   }, [router]);
 
   const fetchFlights = async (airlineId) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/airlines/${airlineId}/flights`);
+      const response = await fetch(
+        `http://localhost:5000/api/airlines/${airlineId}/flights`
+      );
       const data = await response.json();
       setFlights(data);
     } catch (err) {
@@ -131,46 +161,90 @@ export default function AirlineDashboard() {
   };
 
   const handleFormChange = (field, value) => {
-    if (field.includes('.')) {
-      const [parent, child] = field.split('.');
-      setFlightForm(prev => ({
+    if (field.includes(".")) {
+      const [parent, child] = field.split(".");
+      setFlightForm((prev) => ({
         ...prev,
         [parent]: {
           ...prev[parent],
-          [child]: value
-        }
+          [child]: value,
+        },
       }));
     } else {
-      setFlightForm(prev => ({
+      setFlightForm((prev) => ({
         ...prev,
-        [field]: value
+        [field]: value,
       }));
     }
   };
+  const fetchPassengers = async (flightId) => {
+    setPassengersLoading(true);
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/bookings/${airline._id}`
+      );
+      const bookings = await response.json();
+
+      // Filter bookings for the specific flight and map to passenger details
+      const flightPassengers = bookings
+        .filter(
+          (booking) =>
+            booking.flightId._id === flightId && booking.status === "confirmed"
+        )
+        .map((booking) => ({
+          bookingId: booking.bookingId,
+          passenger: booking.passengerId,
+          seatNumber: booking.seatNumber,
+          bookingDate: booking.bookingDate,
+          contactEmail: booking.contactEmail,
+          contactPhone: booking.contactPhone,
+          totalAmount: booking.totalAmount,
+          status: booking.status,
+        }));
+
+      setPassengers(flightPassengers);
+    } catch (err) {
+      console.error("Error fetching passengers:", err);
+      setError("Failed to load passenger data");
+    } finally {
+      setPassengersLoading(false);
+    }
+  };
+
+  const handleViewPassengers = (flight) => {
+    setSelectedFlight(flight);
+    setPassengersDialog(true);
+    fetchPassengers(flight._id);
+  };
 
   const handleOperatingDaysChange = (day) => {
-    setFlightForm(prev => ({
+    setFlightForm((prev) => ({
       ...prev,
       operatingDays: prev.operatingDays.includes(day)
-        ? prev.operatingDays.filter(d => d !== day)
-        : [...prev.operatingDays, day]
+        ? prev.operatingDays.filter((d) => d !== day)
+        : [...prev.operatingDays, day],
     }));
   };
 
   const calculateDuration = () => {
     if (flightForm.departureTime && flightForm.arrivalTime) {
-      const [depHours, depMinutes] = flightForm.departureTime.split(':').map(Number);
-      const [arrHours, arrMinutes] = flightForm.arrivalTime.split(':').map(Number);
-      
-      let totalMinutes = (arrHours * 60 + arrMinutes) - (depHours * 60 + depMinutes);
+      const [depHours, depMinutes] = flightForm.departureTime
+        .split(":")
+        .map(Number);
+      const [arrHours, arrMinutes] = flightForm.arrivalTime
+        .split(":")
+        .map(Number);
+
+      let totalMinutes =
+        arrHours * 60 + arrMinutes - (depHours * 60 + depMinutes);
       if (totalMinutes < 0) totalMinutes += 24 * 60; // Handle next day arrival
-      
+
       const hours = Math.floor(totalMinutes / 60);
       const minutes = totalMinutes % 60;
-      
-      setFlightForm(prev => ({
+
+      setFlightForm((prev) => ({
         ...prev,
-        duration: totalMinutes
+        duration: totalMinutes,
       }));
     }
   };
@@ -182,7 +256,11 @@ export default function AirlineDashboard() {
 
     try {
       // Validate form
-      if (!flightForm.flightNumber || !flightForm.source || !flightForm.destination) {
+      if (
+        !flightForm.flightNumber ||
+        !flightForm.source ||
+        !flightForm.destination
+      ) {
         setError("Please fill in all required fields");
         return;
       }
@@ -197,21 +275,23 @@ export default function AirlineDashboard() {
         airlineId: airline._id,
         airline: airline.airlineName,
         departure: {
-          date: new Date().toISOString().split('T')[0], // Default date
-          time: flightForm.departureTime
+          date: new Date().toISOString().split("T")[0], // Default date
+          time: flightForm.departureTime,
         },
         arrival: {
-          date: new Date().toISOString().split('T')[0], // Default date
-          time: flightForm.arrivalTime
+          date: new Date().toISOString().split("T")[0], // Default date
+          time: flightForm.arrivalTime,
         },
         price: Number(flightForm.price),
         totalSeats: Number(flightForm.totalSeats),
-        availableSeats: Number(flightForm.availableSeats || flightForm.totalSeats),
+        availableSeats: Number(
+          flightForm.availableSeats || flightForm.totalSeats
+        ),
         duration: Number(flightForm.duration),
-        stops: Number(flightForm.stops)
+        stops: Number(flightForm.stops),
       };
 
-      const url = editingFlight 
+      const url = editingFlight
         ? `http://localhost:5000/api/airlines/flights/${editingFlight._id}`
         : `http://localhost:5000/api/airlines/${airline._id}/flights`;
 
@@ -230,15 +310,18 @@ export default function AirlineDashboard() {
       }
 
       const savedFlight = await response.json();
-      
-      setSuccess(editingFlight ? "Flight updated successfully!" : "Flight added successfully!");
+
+      setSuccess(
+        editingFlight
+          ? "Flight updated successfully!"
+          : "Flight added successfully!"
+      );
       setAddFlightDialog(false);
       setEditingFlight(null);
       resetForm();
-      
+
       // Refresh flights list
       fetchFlights(airline._id);
-
     } catch (err) {
       setError("Error: " + err.message);
     }
@@ -264,10 +347,10 @@ export default function AirlineDashboard() {
         discountType: "percentage",
         discountValue: "",
         discountStartDate: "",
-        discountEndDate: ""
+        discountEndDate: "",
       },
       aircraftType: "",
-      baggageAllowance: ""
+      baggageAllowance: "",
     });
   };
 
@@ -292,10 +375,10 @@ export default function AirlineDashboard() {
         discountType: "percentage",
         discountValue: "",
         discountStartDate: "",
-        discountEndDate: ""
+        discountEndDate: "",
       },
       aircraftType: flight.aircraftType || "",
-      baggageAllowance: flight.baggageAllowance || ""
+      baggageAllowance: flight.baggageAllowance || "",
     });
     setAddFlightDialog(true);
   };
@@ -303,9 +386,12 @@ export default function AirlineDashboard() {
   const handleDelete = async (flightId) => {
     if (confirm("Are you sure you want to delete this flight?")) {
       try {
-        const response = await fetch(`http://localhost:5000/api/airlines/flights/${flightId}`, {
-          method: "DELETE",
-        });
+        const response = await fetch(
+          `http://localhost:5000/api/airlines/flights/${flightId}`,
+          {
+            method: "DELETE",
+          }
+        );
 
         if (!response.ok) {
           throw new Error("Failed to delete flight");
@@ -320,15 +406,17 @@ export default function AirlineDashboard() {
   };
 
   const getOperatingDaysLabel = (days) => {
-    return days.map(day => {
-      const dayObj = daysOfWeek.find(d => d.value === day);
-      return dayObj ? dayObj.label.substring(0, 3) : day;
-    }).join(", ");
+    return days
+      .map((day) => {
+        const dayObj = daysOfWeek.find((d) => d.value === day);
+        return dayObj ? dayObj.label.substring(0, 3) : day;
+      })
+      .join(", ");
   };
 
   const getDiscountedPrice = (flight) => {
     if (!flight.discount?.hasDiscount) return flight.price;
-    
+
     if (flight.discount.discountType === "percentage") {
       return flight.price * (1 - flight.discount.discountValue / 100);
     } else {
@@ -341,11 +429,16 @@ export default function AirlineDashboard() {
   }
 
   return (
-    <Box sx={{ flexGrow: 1, minHeight: '100vh', backgroundColor: '#f5f5f5' }}>
+    <Box sx={{ flexGrow: 1, minHeight: "100vh", backgroundColor: "#f5f5f5" }}>
       <AppBar position="static" color="primary">
         <Toolbar>
           <FlightIcon sx={{ mr: 2 }} />
-          <Typography variant="h6" component="div" color="white" sx={{ flexGrow: 1 }}>
+          <Typography
+            variant="h6"
+            component="div"
+            color="white"
+            sx={{ flexGrow: 1 }}
+          >
             {airline.airlineName} - Admin Panel
           </Typography>
           <IconButton color="inherit" onClick={handleLogout}>
@@ -362,7 +455,11 @@ export default function AirlineDashboard() {
           </Alert>
         )}
         {success && (
-          <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccess("")}>
+          <Alert
+            severity="success"
+            sx={{ mb: 3 }}
+            onClose={() => setSuccess("")}
+          >
             {success}
           </Alert>
         )}
@@ -370,7 +467,9 @@ export default function AirlineDashboard() {
         <Grid container spacing={4}>
           {/* Stats Cards */}
           <Grid item xs={12} md={3}>
-            <Card sx={{ background: theme.palette.primary.main, color: 'white' }}>
+            <Card
+              sx={{ background: theme.palette.primary.main, color: "white" }}
+            >
               <CardContent>
                 <Typography variant="h4" color="white" gutterBottom>
                   {flights.length}
@@ -381,12 +480,14 @@ export default function AirlineDashboard() {
               </CardContent>
             </Card>
           </Grid>
-          
+
           <Grid item xs={12} md={3}>
-            <Card sx={{ background: theme.palette.secondary.main, color: 'white' }}>
+            <Card
+              sx={{ background: theme.palette.secondary.main, color: "white" }}
+            >
               <CardContent>
                 <Typography variant="h4" color="white" gutterBottom>
-                  {flights.filter(f => f.isActive).length}
+                  {flights.filter((f) => f.isActive).length}
                 </Typography>
                 <Typography variant="h6" color="white">
                   Active Flights
@@ -394,9 +495,11 @@ export default function AirlineDashboard() {
               </CardContent>
             </Card>
           </Grid>
-          
+
           <Grid item xs={12} md={3}>
-            <Card sx={{ background: theme.palette.success.main, color: 'white' }}>
+            <Card
+              sx={{ background: theme.palette.success.main, color: "white" }}
+            >
               <CardContent>
                 <Typography variant="h4" color="white" gutterBottom>
                   {airline.airlineCode}
@@ -409,10 +512,13 @@ export default function AirlineDashboard() {
           </Grid>
 
           <Grid item xs={12} md={3}>
-            <Card sx={{ background: theme.palette.info.main, color: 'white' }}>
+            <Card sx={{ background: theme.palette.info.main, color: "white" }}>
               <CardContent>
                 <Typography variant="h4" color="white" gutterBottom>
-                  {flights.reduce((sum, flight) => sum + flight.availableSeats, 0)}
+                  {flights.reduce(
+                    (sum, flight) => sum + flight.availableSeats,
+                    0
+                  )}
                 </Typography>
                 <Typography variant="h6" color="white">
                   Available Seats
@@ -423,7 +529,7 @@ export default function AirlineDashboard() {
 
           {/* Action Buttons */}
           <Grid item xs={12}>
-            <Paper sx={{ p: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <Paper sx={{ p: 3, display: "flex", gap: 2, flexWrap: "wrap" }}>
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
@@ -449,10 +555,14 @@ export default function AirlineDashboard() {
           {/* Flights Table */}
           <Grid item xs={12}>
             <Paper sx={{ p: 3 }}>
-              <Typography variant="h5" gutterBottom sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography
+                variant="h5"
+                gutterBottom
+                sx={{ mb: 3, display: "flex", alignItems: "center", gap: 1 }}
+              >
                 <FlightIcon /> Manage Flights
               </Typography>
-              
+
               <TableContainer>
                 <Table>
                   <TableHead>
@@ -464,6 +574,7 @@ export default function AirlineDashboard() {
                       <TableCell>Class</TableCell>
                       <TableCell>Price</TableCell>
                       <TableCell>Seats</TableCell>
+                      <TableCell>Passengers</TableCell>
                       <TableCell>Status</TableCell>
                       <TableCell>Actions</TableCell>
                     </TableRow>
@@ -489,31 +600,48 @@ export default function AirlineDashboard() {
                             {flight.departure.time} - {flight.arrival.time}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {Math.floor(flight.duration / 60)}h {flight.duration % 60}m
+                            {Math.floor(flight.duration / 60)}h{" "}
+                            {flight.duration % 60}m
                           </Typography>
                         </TableCell>
                         <TableCell>
-                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                            {getOperatingDaysLabel(flight.operatingDays || []).split(', ').map(day => (
-                              <Chip key={day} label={day} size="small" variant="outlined" />
-                            ))}
+                          <Box
+                            sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}
+                          >
+                            {getOperatingDaysLabel(flight.operatingDays || [])
+                              .split(", ")
+                              .map((day) => (
+                                <Chip
+                                  key={day}
+                                  label={day}
+                                  size="small"
+                                  variant="outlined"
+                                />
+                              ))}
                           </Box>
                         </TableCell>
                         <TableCell>
-                          <Chip 
-                            label={flight.class} 
-                            size="small" 
-                            color="primary" 
-                            variant="outlined" 
+                          <Chip
+                            label={flight.class}
+                            size="small"
+                            color="primary"
+                            variant="outlined"
                           />
                         </TableCell>
                         <TableCell>
                           <Box>
                             <Typography variant="body2" fontWeight="bold">
-                              ₹{flight.discount?.hasDiscount ? getDiscountedPrice(flight).toFixed(2) : flight.price}
+                              ₹
+                              {flight.discount?.hasDiscount
+                                ? getDiscountedPrice(flight).toFixed(2)
+                                : flight.price}
                             </Typography>
                             {flight.discount?.hasDiscount && (
-                              <Typography variant="caption" color="error" sx={{ textDecoration: 'line-through' }}>
+                              <Typography
+                                variant="caption"
+                                color="error"
+                                sx={{ textDecoration: "line-through" }}
+                              >
                                 ₹{flight.price}
                               </Typography>
                             )}
@@ -525,25 +653,35 @@ export default function AirlineDashboard() {
                           </Typography>
                         </TableCell>
                         <TableCell>
-                          <Chip 
-                            label={flight.isActive ? "Active" : "Inactive"} 
+                          <Chip
+                            label={flight.isActive ? "Active" : "Inactive"}
                             color={flight.isActive ? "success" : "default"}
                             size="small"
                           />
                         </TableCell>
                         <TableCell>
-                          <Box sx={{ display: 'flex', gap: 1 }}>
-                            <MuiIconButton 
-                              size="small" 
+                          <Box sx={{ display: "flex", gap: 1 }}>
+                            <MuiIconButton
+                              size="small"
                               color="primary"
                               onClick={() => handleEdit(flight)}
+                              title="Edit Flight"
                             >
                               <EditIcon />
                             </MuiIconButton>
-                            <MuiIconButton 
-                              size="small" 
+                            <MuiIconButton
+                              size="small"
+                              color="info"
+                              onClick={() => handleViewPassengers(flight)}
+                              title="View Passengers"
+                            >
+                              <PeopleIcon />
+                            </MuiIconButton>
+                            <MuiIconButton
+                              size="small"
                               color="error"
                               onClick={() => handleDelete(flight._id)}
+                              title="Delete Flight"
                             >
                               <DeleteIcon />
                             </MuiIconButton>
@@ -560,8 +698,8 @@ export default function AirlineDashboard() {
       </Container>
 
       {/* Add/Edit Flight Dialog */}
-      <Dialog 
-        open={addFlightDialog} 
+      <Dialog
+        open={addFlightDialog}
         onClose={() => setAddFlightDialog(false)}
         maxWidth="md"
         fullWidth
@@ -578,7 +716,9 @@ export default function AirlineDashboard() {
                   fullWidth
                   label="Flight Number"
                   value={flightForm.flightNumber}
-                  onChange={(e) => handleFormChange("flightNumber", e.target.value)}
+                  onChange={(e) =>
+                    handleFormChange("flightNumber", e.target.value)
+                  }
                   required
                 />
               </Grid>
@@ -587,15 +727,19 @@ export default function AirlineDashboard() {
                   fullWidth
                   label="Aircraft Type"
                   value={flightForm.aircraftType}
-                  onChange={(e) => handleFormChange("aircraftType", e.target.value)}
+                  onChange={(e) =>
+                    handleFormChange("aircraftType", e.target.value)
+                  }
                   select
                 >
-                  {aircraftTypes.map(type => (
-                    <MenuItem key={type} value={type}>{type}</MenuItem>
+                  {aircraftTypes.map((type) => (
+                    <MenuItem key={type} value={type}>
+                      {type}
+                    </MenuItem>
                   ))}
                 </TextField>
               </Grid>
-              
+
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
@@ -610,7 +754,9 @@ export default function AirlineDashboard() {
                   fullWidth
                   label="Destination City"
                   value={flightForm.destination}
-                  onChange={(e) => handleFormChange("destination", e.target.value)}
+                  onChange={(e) =>
+                    handleFormChange("destination", e.target.value)
+                  }
                   required
                 />
               </Grid>
@@ -667,24 +813,42 @@ export default function AirlineDashboard() {
 
               {/* Operating Days */}
               <Grid item xs={12}>
-  <FormControl fullWidth>
-    <InputLabel shrink>Operating Days</InputLabel>
-    <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-      {daysOfWeek.map((day) => (
-        <Chip
-          key={day.value}
-          label={day.label}
-          clickable
-          color={flightForm.operatingDays.includes(day.value) ? "primary" : "default"}
-          variant={flightForm.operatingDays.includes(day.value) ? "filled" : "outlined"}
-          onClick={() => handleOperatingDaysChange(day.value)}
-          onDelete={flightForm.operatingDays.includes(day.value) ? () => handleOperatingDaysChange(day.value) : undefined}
-          deleteIcon={flightForm.operatingDays.includes(day.value) ? <CloseIcon /> : undefined}
-        />
-      ))}
-    </Box>
-  </FormControl>
-</Grid>
+                <FormControl fullWidth>
+                  <InputLabel shrink>Operating Days</InputLabel>
+                  <Box
+                    sx={{ mt: 2, display: "flex", flexWrap: "wrap", gap: 1 }}
+                  >
+                    {daysOfWeek.map((day) => (
+                      <Chip
+                        key={day.value}
+                        label={day.label}
+                        clickable
+                        color={
+                          flightForm.operatingDays.includes(day.value)
+                            ? "primary"
+                            : "default"
+                        }
+                        variant={
+                          flightForm.operatingDays.includes(day.value)
+                            ? "filled"
+                            : "outlined"
+                        }
+                        onClick={() => handleOperatingDaysChange(day.value)}
+                        onDelete={
+                          flightForm.operatingDays.includes(day.value)
+                            ? () => handleOperatingDaysChange(day.value)
+                            : undefined
+                        }
+                        deleteIcon={
+                          flightForm.operatingDays.includes(day.value) ? (
+                            <CloseIcon />
+                          ) : undefined
+                        }
+                      />
+                    ))}
+                  </Box>
+                </FormControl>
+              </Grid>
 
               {/* Class and Pricing */}
               <Grid item xs={12} sm={6}>
@@ -695,8 +859,10 @@ export default function AirlineDashboard() {
                   onChange={(e) => handleFormChange("class", e.target.value)}
                   select
                 >
-                  {flightClasses.map(cls => (
-                    <MenuItem key={cls} value={cls}>{cls}</MenuItem>
+                  {flightClasses.map((cls) => (
+                    <MenuItem key={cls} value={cls}>
+                      {cls}
+                    </MenuItem>
                   ))}
                 </TextField>
               </Grid>
@@ -708,7 +874,11 @@ export default function AirlineDashboard() {
                   value={flightForm.price}
                   onChange={(e) => handleFormChange("price", e.target.value)}
                   required
-                  InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">$</InputAdornment>
+                    ),
+                  }}
                 />
               </Grid>
 
@@ -719,7 +889,9 @@ export default function AirlineDashboard() {
                   label="Total Seats"
                   type="number"
                   value={flightForm.totalSeats}
-                  onChange={(e) => handleFormChange("totalSeats", e.target.value)}
+                  onChange={(e) =>
+                    handleFormChange("totalSeats", e.target.value)
+                  }
                   required
                 />
               </Grid>
@@ -729,7 +901,9 @@ export default function AirlineDashboard() {
                   label="Available Seats"
                   type="number"
                   value={flightForm.availableSeats}
-                  onChange={(e) => handleFormChange("availableSeats", e.target.value)}
+                  onChange={(e) =>
+                    handleFormChange("availableSeats", e.target.value)
+                  }
                   required
                 />
               </Grid>
@@ -740,7 +914,9 @@ export default function AirlineDashboard() {
                   fullWidth
                   label="Baggage Allowance"
                   value={flightForm.baggageAllowance}
-                  onChange={(e) => handleFormChange("baggageAllowance", e.target.value)}
+                  onChange={(e) =>
+                    handleFormChange("baggageAllowance", e.target.value)
+                  }
                   placeholder="e.g., 20kg check-in, 7kg cabin"
                 />
               </Grid>
@@ -752,7 +928,12 @@ export default function AirlineDashboard() {
                     control={
                       <Switch
                         checked={flightForm.discount.hasDiscount}
-                        onChange={(e) => handleFormChange("discount.hasDiscount", e.target.checked)}
+                        onChange={(e) =>
+                          handleFormChange(
+                            "discount.hasDiscount",
+                            e.target.checked
+                          )
+                        }
                       />
                     }
                     label="Apply Discount"
@@ -767,7 +948,12 @@ export default function AirlineDashboard() {
                       fullWidth
                       label="Discount Type"
                       value={flightForm.discount.discountType}
-                      onChange={(e) => handleFormChange("discount.discountType", e.target.value)}
+                      onChange={(e) =>
+                        handleFormChange(
+                          "discount.discountType",
+                          e.target.value
+                        )
+                      }
                       select
                     >
                       <MenuItem value="percentage">Percentage (%)</MenuItem>
@@ -780,11 +966,18 @@ export default function AirlineDashboard() {
                       label="Discount Value"
                       type="number"
                       value={flightForm.discount.discountValue}
-                      onChange={(e) => handleFormChange("discount.discountValue", e.target.value)}
+                      onChange={(e) =>
+                        handleFormChange(
+                          "discount.discountValue",
+                          e.target.value
+                        )
+                      }
                       InputProps={{
                         endAdornment: (
                           <InputAdornment position="end">
-                            {flightForm.discount.discountType === "percentage" ? "%" : "$"}
+                            {flightForm.discount.discountType === "percentage"
+                              ? "%"
+                              : "$"}
                           </InputAdornment>
                         ),
                       }}
@@ -796,7 +989,12 @@ export default function AirlineDashboard() {
                       label="Discount Start Date"
                       type="date"
                       value={flightForm.discount.discountStartDate}
-                      onChange={(e) => handleFormChange("discount.discountStartDate", e.target.value)}
+                      onChange={(e) =>
+                        handleFormChange(
+                          "discount.discountStartDate",
+                          e.target.value
+                        )
+                      }
                       InputLabelProps={{ shrink: true }}
                     />
                   </Grid>
@@ -806,7 +1004,12 @@ export default function AirlineDashboard() {
                       label="Discount End Date"
                       type="date"
                       value={flightForm.discount.discountEndDate}
-                      onChange={(e) => handleFormChange("discount.discountEndDate", e.target.value)}
+                      onChange={(e) =>
+                        handleFormChange(
+                          "discount.discountEndDate",
+                          e.target.value
+                        )
+                      }
                       InputLabelProps={{ shrink: true }}
                     />
                   </Grid>
@@ -820,7 +1023,9 @@ export default function AirlineDashboard() {
                     control={
                       <Switch
                         checked={flightForm.isActive}
-                        onChange={(e) => handleFormChange("isActive", e.target.checked)}
+                        onChange={(e) =>
+                          handleFormChange("isActive", e.target.checked)
+                        }
                       />
                     }
                     label="Active Flight"
@@ -832,13 +1037,222 @@ export default function AirlineDashboard() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setAddFlightDialog(false)}>Cancel</Button>
-          <Button 
+          <Button
             onClick={handleSubmit}
             variant="contained"
             startIcon={editingFlight ? <EditIcon /> : <AddIcon />}
           >
             {editingFlight ? "Update Flight" : "Add Flight"}
           </Button>
+        </DialogActions>
+      </Dialog>
+      {/* Passengers List Dialog */}
+      <Dialog
+        open={passengersDialog}
+        onClose={() => setPassengersDialog(false)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <PeopleIcon />
+            Passengers List - {selectedFlight?.flightNumber}
+            <Typography variant="body2" color="text.secondary" sx={{ ml: 2 }}>
+              {selectedFlight?.source} → {selectedFlight?.destination}
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {passengersLoading ? (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+              <Typography>Loading passengers...</Typography>
+            </Box>
+          ) : passengers.length === 0 ? (
+            <Box sx={{ textAlign: "center", py: 4 }}>
+              <PeopleIcon
+                sx={{ fontSize: 48, color: "text.secondary", mb: 2 }}
+              />
+              <Typography variant="h6" color="text.secondary">
+                No passengers found for this flight
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                There are no confirmed bookings for this flight yet.
+              </Typography>
+            </Box>
+          ) : (
+            <TableContainer component={Paper} variant="outlined">
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>
+                      <strong>Booking ID</strong>
+                    </TableCell>
+                    <TableCell>
+                      <strong>Passenger Name</strong>
+                    </TableCell>
+                    <TableCell>
+                      <strong>Email</strong>
+                    </TableCell>
+                    <TableCell>
+                      <strong>Phone</strong>
+                    </TableCell>
+                    <TableCell>
+                      <strong>Seat Number</strong>
+                    </TableCell>
+                    <TableCell>
+                      <strong>Booking Date</strong>
+                    </TableCell>
+                    <TableCell>
+                      <strong>Amount</strong>
+                    </TableCell>
+                    <TableCell>
+                      <strong>Status</strong>
+                    </TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {passengers.map((item, index) => (
+                    <TableRow key={item.bookingId} hover>
+                      <TableCell>
+                        <Typography variant="body2" fontFamily="monospace">
+                          {item.bookingId}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight="medium">
+                          {item.passenger.firstName} {item.passenger.lastName}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {item.passenger.gender || "N/A"} •{" "}
+                          {item.passenger.dateOfBirth
+                            ? new Date(
+                                item.passenger.dateOfBirth
+                              ).toLocaleDateString()
+                            : "N/A"}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {item.passenger.email}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {item.passenger.phone}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={item.seatNumber || "Not assigned"}
+                          size="small"
+                          color={item.seatNumber ? "primary" : "default"}
+                          variant={item.seatNumber ? "filled" : "outlined"}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {new Date(item.bookingDate).toLocaleDateString()}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {new Date(item.bookingDate).toLocaleTimeString()}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight="bold">
+                          ₹{item.totalAmount}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={item.status}
+                          size="small"
+                          color={
+                            item.status === "confirmed"
+                              ? "success"
+                              : item.status === "pending"
+                              ? "warning"
+                              : item.status === "cancelled"
+                              ? "error"
+                              : "default"
+                          }
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+
+          {/* Summary Stats */}
+          {passengers.length > 0 && (
+            <Box
+              sx={{ mt: 3, p: 2, backgroundColor: "grey.50", borderRadius: 1 }}
+            >
+              <Grid container spacing={3}>
+                <Grid item xs={12} sm={3}>
+                  <Typography variant="body2" color="text.secondary">
+                    Total Passengers
+                  </Typography>
+                  <Typography variant="h6" fontWeight="bold">
+                    {passengers.length}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Typography variant="body2" color="text.secondary">
+                    Confirmed Bookings
+                  </Typography>
+                  <Typography
+                    variant="h6"
+                    fontWeight="bold"
+                    color="success.main"
+                  >
+                    {passengers.filter((p) => p.status === "confirmed").length}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Typography variant="body2" color="text.secondary">
+                    Total Revenue
+                  </Typography>
+                  <Typography
+                    variant="h6"
+                    fontWeight="bold"
+                    color="primary.main"
+                  >
+                    ₹
+                    {passengers
+                      .reduce((sum, p) => sum + p.totalAmount, 0)
+                      .toFixed(2)}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <Typography variant="body2" color="text.secondary">
+                    Occupancy Rate
+                  </Typography>
+                  <Typography variant="h6" fontWeight="bold">
+                    {(
+                      (passengers.length / selectedFlight?.totalSeats) *
+                      100
+                    ).toFixed(1)}
+                    %
+                  </Typography>
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPassengersDialog(false)}>Close</Button>
+          {passengers.length > 0 && (
+            <Button
+              variant="outlined"
+              startIcon={<PdfIcon />}
+              onClick={handleExportPDF}
+              color="primary"
+            >
+              Export PDF
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
     </Box>

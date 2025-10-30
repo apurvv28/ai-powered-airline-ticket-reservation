@@ -5,14 +5,6 @@ const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
 const bcrypt = require("bcryptjs");
-const Razorpay = require('razorpay');
-const crypto = require('crypto');
-
-// Initialize Razorpay
-const razorpay = new Razorpay({
-  key_id: 'rzp_test_your_key_here', // Replace with your test key
-  key_secret: 'your_secret_here' // Replace with your test secret
-});
 
 const app = express();
 const port = 5000;
@@ -723,6 +715,60 @@ app.post('/users/login', async (req, res) => {
   }
 });
 
+// Update user profile
+app.put("/api/users/update", async (req, res) => {
+  try {
+    const { userId, firstName, lastName, email, phone } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ message: 'User ID is required' });
+    }
+
+    // Check if email is being changed and if it's already taken by another user
+    if (email) {
+      const existingUser = await User.findOne({ 
+        email: email, 
+        _id: { $ne: new mongoose.Types.ObjectId(userId) } 
+      });
+      
+      if (existingUser) {
+        return res.status(409).json({ message: 'Email already taken by another user' });
+      }
+    }
+
+    // Update user data
+    const result = await User.findByIdAndUpdate(
+      new mongoose.Types.ObjectId(userId),
+      {
+        $set: {
+          firstName,
+          lastName,
+          email,
+          phone,
+          updatedAt: new Date()
+        }
+      },
+      { new: true }
+    );
+
+    if (!result) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Convert to object and remove password
+    const updatedUser = result.toObject();
+    delete updatedUser.password;
+
+    res.status(200).json({ 
+      message: 'Profile updated successfully',
+      user: updatedUser
+    });
+  } catch (error) {
+    console.error('Error updating user:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Get all insurances
 app.get("/api/insurances", async (req, res) => {
   try {
@@ -790,7 +836,8 @@ app.post("/api/bookings", async (req, res) => {
           : Math.max(0, flight.price - flight.discount.discountValue))
       : flight.price;
 
-    const totalAmount = flightAmount + insuranceAmount;
+    // Ensure amounts are valid numbers and properly rounded
+    const totalAmount = Math.round((flightAmount + insuranceAmount) * 100) / 100;
 
     // Generate unique booking ID
     const bookingId = `BK${Date.now()}${Math.floor(Math.random() * 1000)}`;
@@ -835,81 +882,28 @@ app.post("/api/bookings", async (req, res) => {
   }
 });
 
-// Create Razorpay order
-app.post("/api/create-order", async (req, res) => {
-  try {
-    const { amount, currency, bookingId } = req.body;
-
-    const order = await razorpay.orders.create({
-      amount: amount,
-      currency: currency,
-      receipt: bookingId,
-      notes: {
-        bookingId: bookingId
-      }
-    });
-
-    res.json(order);
-  } catch (err) {
-    console.error("Error creating order:", err);
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// Process payment and confirm booking
+// Simplified payment confirmation endpoint
 app.put("/api/bookings/:bookingId/payment", async (req, res) => {
   try {
     const { bookingId } = req.params;
-    const { paymentId, orderId, signature, paymentStatus } = req.body;
-
+    
     const booking = await Booking.findById(bookingId);
     if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
     }
+    
+    // Always mark as completed in this simplified version
+    booking.paymentId = 'PAYMENT_' + Date.now();
+    booking.paymentStatus = 'completed';
+    booking.status = 'confirmed';
 
-    // Check for valid payment status
-    if (!['pending', 'confirmed'].includes(booking.status)) {
-      return res.status(400).json({
-        message: `Cannot process payment for booking with status: ${booking.status}. Only pending or confirmed bookings can be processed.`
-      });
-    }
-
-    // Skip signature verification for dummy payments (paymentId starting with 'pay_' or no signature provided)
-    const isDummyPayment = !signature || signature === '' || signature === 'null' || signature === 'undefined' || paymentId.startsWith('pay_');
-
-    if (!isDummyPayment) {
-      // Verify Razorpay signature using HMAC SHA256 for real payments
-      const expectedSignature = crypto
-        .createHmac('sha256', razorpay.key_secret)
-        .update(orderId + "|" + paymentId)
-        .digest('hex');
-
-      if (expectedSignature !== signature) {
-        return res.status(400).json({ message: "Invalid payment signature" });
-      }
-    }
-
-    // Update booking with payment info
-    booking.paymentId = paymentId;
-    booking.paymentStatus = paymentStatus;
-
-    if (paymentStatus === 'completed') {
-      booking.status = 'confirmed';
-
-      try {
-        // Assign a random seat to the booking
-        const assignedSeat = await assignSeatToBooking(booking.flightId, booking._id);
-        booking.seatNumber = assignedSeat;
-      } catch (error) {
-        console.error('Error assigning seat:', error);
-        return res.status(400).json({ message: error.message });
-      }
-    } else if (paymentStatus === 'failed') {
-      booking.status = 'cancelled';
-      // Restore seat availability
-      await Flight.findByIdAndUpdate(booking.flightId, {
-        $inc: { availableSeats: 1 }
-      });
+    try {
+      // Assign a random seat to the booking
+      const assignedSeat = await assignSeatToBooking(booking.flightId, booking._id);
+      booking.seatNumber = assignedSeat;
+    } catch (error) {
+      console.error('Error assigning seat:', error);
+      return res.status(400).json({ message: error.message });
     }
 
     await booking.save();
@@ -966,6 +960,8 @@ app.get("/api/bookings/:airlineId", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+
 
 // Seed insurances data (run once to populate database)
 app.post("/api/insurances/seed", async (req, res) => {
