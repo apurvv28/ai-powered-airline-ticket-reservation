@@ -1,9 +1,8 @@
 "use client";
-
 import React, { useState, useEffect, useRef } from "react";
-import dynamic from 'next/dynamic';
+import dynamic from "next/dynamic";
 import PdfIcon from "@mui/icons-material/PictureAsPdf";
-import { useReactToPrint } from 'react-to-print';
+import { useReactToPrint } from "react-to-print";
 //const PassengerListPDF = dynamic(() => import("../components/PassengerListPDF"), { ssr: false });
 import { useRouter } from "next/navigation";
 import {
@@ -123,10 +122,19 @@ export default function AirlineDashboard() {
     "Bombardier CRJ",
   ];
 
-  const handleExportPDF = () => {
-    if (!selectedFlight) return;
-    generatePassengerListPDF(selectedFlight, passengers);
-  };
+  const handleExportPDF = async () => {
+  if (!selectedFlight || passengers.length === 0) {
+    alert('No passengers to export');
+    return;
+  }
+  
+  try {
+    await generatePassengerListPDF(selectedFlight, passengers);
+  } catch (error) {
+    console.error('PDF export failed:', error);
+    alert('Failed to export PDF. Please try again.');
+  }
+};
 
   useEffect(() => {
     const airlineData = localStorage.getItem("airline");
@@ -210,6 +218,152 @@ export default function AirlineDashboard() {
       setPassengersLoading(false);
     }
   };
+
+  const generatePassengerListPDF = async (flight, passengers) => {
+  try {
+    // Dynamically import jsPDF
+    const { jsPDF } = await import('jspdf');
+    
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    // Header with SkyWings branding
+    doc.setFillColor(41, 128, 185);
+    doc.rect(0, 0, pageWidth, 30, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(24);
+    doc.setFont(undefined, 'bold');
+    doc.text('SKYWINGS', pageWidth / 2, 18, { align: 'center' });
+    
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.text('Airline Management System', pageWidth / 2, 25, { align: 'center' });
+    
+    // Reset text color
+    doc.setTextColor(0, 0, 0);
+    
+    // Title
+    doc.setFontSize(18);
+    doc.setFont(undefined, 'bold');
+    doc.text(`PASSENGER LIST - FLIGHT ${flight.flightNumber}`, 14, 45);
+    
+    // Flight details section
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.text('Flight Details:', 14, 58);
+    
+    doc.setFont(undefined, 'normal');
+    doc.text(`Route: ${flight.source} to ${flight.destination}`, 14, 66);
+    doc.text(`Departure Time: ${flight.departure.time}`, 14, 74);
+    doc.text(`Report Date: ${new Date().toLocaleDateString()}`, 14, 82);
+    
+    // Table setup
+    let yPosition = 95;
+    const lineHeight = 8;
+    const colWidths = [35, 50, 35, 20, 25, 25];
+    
+    // Table headers with background
+    doc.setFillColor(240, 240, 240);
+    doc.rect(14, yPosition - 5, pageWidth - 28, 10, 'F');
+    
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'bold');
+    let xPosition = 14;
+    const headers = ['Name', 'Email', 'Phone', 'Seat', 'Amount', 'Status'];
+    
+    headers.forEach((header, index) => {
+      doc.text(header, xPosition + 2, yPosition);
+      xPosition += colWidths[index];
+    });
+    
+    yPosition += lineHeight + 2;
+    
+    // Table rows
+    doc.setFont(undefined, 'normal');
+    let rowCount = 0;
+    
+    passengers.forEach((passenger) => {
+      if (yPosition > 270) {
+        doc.addPage();
+        yPosition = 20;
+        
+        // Add header on new page
+        doc.setFillColor(41, 128, 185);
+        doc.rect(0, 0, pageWidth, 15, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(12);
+        doc.setFont(undefined, 'bold');
+        doc.text(`SKYWINGS - Passenger List Continuation`, pageWidth / 2, 10, { align: 'center' });
+        doc.setTextColor(0, 0, 0);
+        
+        yPosition = 30;
+      }
+      
+      // Alternate row background
+      if (rowCount % 2 === 0) {
+        doc.setFillColor(250, 250, 250);
+        doc.rect(14, yPosition - 6, pageWidth - 28, 8, 'F');
+      }
+      
+      const rowData = [
+        `${passenger.passenger.firstName} ${passenger.passenger.lastName}`.substring(0, 18),
+        passenger.passenger.email.substring(0, 22),
+        passenger.passenger.phone.substring(0, 12),
+        passenger.seatNumber || "N/A",
+        `Rs.${passenger.totalAmount}`,
+        passenger.status
+      ];
+      
+      xPosition = 14;
+      doc.setFontSize(8);
+      
+      rowData.forEach((text, index) => {
+        doc.text(text, xPosition + 2, yPosition);
+        xPosition += colWidths[index];
+      });
+      
+      yPosition += lineHeight;
+      rowCount++;
+    });
+    
+    // Summary section
+    yPosition += 10;
+    doc.setDrawColor(200, 200, 200);
+    doc.line(14, yPosition, pageWidth - 14, yPosition);
+    
+    yPosition += 8;
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'bold');
+    
+    const totalPassengers = passengers.length;
+    const totalRevenue = passengers.reduce((sum, p) => sum + p.totalAmount, 0);
+    const confirmedPassengers = passengers.filter(p => p.status === 'confirmed').length;
+    
+    doc.text(`SUMMARY`, 14, yPosition);
+    yPosition += 8;
+    doc.setFont(undefined, 'normal');
+    doc.text(`Total Passengers: ${totalPassengers}`, 14, yPosition);
+    doc.text(`Confirmed: ${confirmedPassengers}`, 80, yPosition);
+    doc.text(`Pending: ${totalPassengers - confirmedPassengers}`, 130, yPosition);
+    yPosition += 8;
+    doc.text(`Total Revenue: Rs.${totalRevenue.toFixed(2)}`, 14, yPosition);
+    
+    // Footer
+    const footerY = doc.internal.pageSize.getHeight() - 10;
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Generated by SkyWings Airlines • ${new Date().toLocaleString()}`, pageWidth / 2, footerY, { align: 'center' });
+    
+    // Save PDF
+    const fileName = `SkyWings_PassengerList_${flight.flightNumber}_${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(fileName);
+    
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    alert('Error generating PDF. Please try again.');
+  }
+};
 
   const handleViewPassengers = (flight) => {
     setSelectedFlight(flight);

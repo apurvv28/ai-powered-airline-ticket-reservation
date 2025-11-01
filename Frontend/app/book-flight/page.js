@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Container,
   Typography,
@@ -26,28 +26,28 @@ import {
   DialogTitle,
   DialogContent,
   CircularProgress,
-} from '@mui/material';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { useTheme } from '@mui/material/styles';
-import { motion } from 'framer-motion';
+} from "@mui/material";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import { useTheme } from "@mui/material/styles";
+import { motion } from "framer-motion";
 
 // Icons
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import PersonIcon from '@mui/icons-material/Person';
-import SecurityIcon from '@mui/icons-material/Security';
-import PaymentIcon from '@mui/icons-material/Payment';
-import FlightIcon from '@mui/icons-material/Flight';
-import ContactMailIcon from '@mui/icons-material/ContactMail';
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import PersonIcon from "@mui/icons-material/Person";
+import SecurityIcon from "@mui/icons-material/Security";
+import PaymentIcon from "@mui/icons-material/Payment";
+import FlightIcon from "@mui/icons-material/Flight";
+import ContactMailIcon from "@mui/icons-material/ContactMail";
 
-const steps = ['Passenger Details', 'Insurance & Review', 'Payment'];
+const steps = ["Passenger Details", "Insurance & Review", "Payment"];
 
 export default function BookFlightPage() {
   const theme = useTheme();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const flightId = searchParams.get('flightId');
+  const flightId = searchParams.get("flightId");
 
   const [activeStep, setActiveStep] = useState(0);
   const [flight, setFlight] = useState(null);
@@ -59,40 +59,49 @@ export default function BookFlightPage() {
 
   // Form states
   const [passengerDetails, setPassengerDetails] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
     dateOfBirth: null,
-    gender: '',
-    passportNumber: '',
-    nationality: ''
+    gender: "",
+    passportNumber: "",
+    nationality: "",
   });
 
-  const [selectedInsurance, setSelectedInsurance] = useState('');
+  const [selectedInsurance, setSelectedInsurance] = useState("");
   const [contactDetails, setContactDetails] = useState({
-    email: '',
-    phone: '',
-    specialRequests: ''
+    email: "",
+    phone: "",
+    specialRequests: "",
   });
 
   const [errors, setErrors] = useState({});
-  const [success, setSuccess] = useState('');
+  const [success, setSuccess] = useState("");
 
   const fetchFlightDetails = useCallback(async () => {
     try {
-      // For now, we'll get flight details from localStorage or URL params
-      // In a real app, you'd fetch from API using flightId
-      const flightData = JSON.parse(localStorage.getItem('selectedFlight'));
-      if (flightData) {
+      const flightData = JSON.parse(localStorage.getItem("selectedFlight"));
+      const userData = JSON.parse(localStorage.getItem("user"));
+
+      if (flightData && userData) {
         setFlight(flightData);
+        // Set passenger email from logged-in user (non-editable)
+        setPassengerDetails((prev) => ({
+          ...prev,
+          email: userData.email,
+        }));
+        // Set contact email from logged-in user
+        setContactDetails((prev) => ({
+          ...prev,
+          email: userData.email,
+        }));
       } else {
-        // Fallback: redirect back to search
-        router.push('/search-flights');
+        router.push("/search-flights");
       }
     } catch (err) {
-      console.error('Error fetching flight details:', err);
-      router.push('/search-flights');
+      console.error("Error fetching flight details:", err);
+      router.push("/search-flights");
     } finally {
       setLoading(false);
     }
@@ -100,7 +109,7 @@ export default function BookFlightPage() {
 
   const fetchInsurances = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/insurances');
+      const response = await fetch("http://localhost:5000/api/insurances");
       if (!response.ok) {
         const text = await response.text();
         throw new Error(`HTTP ${response.status}: ${text}`);
@@ -108,7 +117,7 @@ export default function BookFlightPage() {
       const data = await response.json();
       setInsurances(data);
     } catch (err) {
-      console.error('Error fetching insurances:', err);
+      console.error("Error fetching insurances:", err);
     }
   }, []);
 
@@ -122,12 +131,15 @@ export default function BookFlightPage() {
   const validatePassengerDetails = () => {
     const newErrors = {};
 
-    if (!passengerDetails.firstName.trim()) newErrors.firstName = 'First name is required';
-    if (!passengerDetails.lastName.trim()) newErrors.lastName = 'Last name is required';
-    if (!passengerDetails.email.trim()) newErrors.email = 'Email is required';
-    if (!passengerDetails.phone.trim()) newErrors.phone = 'Phone is required';
-    if (!passengerDetails.dateOfBirth) newErrors.dateOfBirth = 'Date of birth is required';
-    if (!passengerDetails.gender) newErrors.gender = 'Gender is required';
+    if (!passengerDetails.firstName.trim())
+      newErrors.firstName = "First name is required";
+    if (!passengerDetails.lastName.trim())
+      newErrors.lastName = "Last name is required";
+    if (!passengerDetails.email.trim()) newErrors.email = "Email is required";
+    if (!passengerDetails.phone.trim()) newErrors.phone = "Phone is required";
+    if (!passengerDetails.dateOfBirth)
+      newErrors.dateOfBirth = "Date of birth is required";
+    if (!passengerDetails.gender) newErrors.gender = "Gender is required";
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -136,8 +148,10 @@ export default function BookFlightPage() {
   const validateContactDetails = () => {
     const newErrors = {};
 
-    if (!contactDetails.email.trim()) newErrors.contactEmail = 'Contact email is required';
-    if (!contactDetails.phone.trim()) newErrors.contactPhone = 'Contact phone is required';
+    if (!contactDetails.email.trim())
+      newErrors.contactEmail = "Contact email is required";
+    if (!contactDetails.phone.trim())
+      newErrors.contactPhone = "Contact phone is required";
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -158,27 +172,27 @@ export default function BookFlightPage() {
   };
 
   const handlePassengerChange = (field, value) => {
-    setPassengerDetails(prev => ({
+    setPassengerDetails((prev) => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
     if (errors[field]) {
-      setErrors(prev => ({
+      setErrors((prev) => ({
         ...prev,
-        [field]: ''
+        [field]: "",
       }));
     }
   };
 
   const handleContactChange = (field, value) => {
-    setContactDetails(prev => ({
+    setContactDetails((prev) => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
     if (errors[`contact${field.charAt(0).toUpperCase() + field.slice(1)}`]) {
-      setErrors(prev => ({
+      setErrors((prev) => ({
         ...prev,
-        [`contact${field.charAt(0).toUpperCase() + field.slice(1)}`]: ''
+        [`contact${field.charAt(0).toUpperCase() + field.slice(1)}`]: "",
       }));
     }
   };
@@ -187,13 +201,13 @@ export default function BookFlightPage() {
     if (!flight) return 0;
 
     const flightAmount = flight.discount?.hasDiscount
-      ? (flight.discount.discountType === "percentage"
-          ? flight.price * (1 - flight.discount.discountValue / 100)
-          : Math.max(0, flight.price - flight.discount.discountValue))
+      ? flight.discount.discountType === "percentage"
+        ? flight.price * (1 - flight.discount.discountValue / 100)
+        : Math.max(0, flight.price - flight.discount.discountValue)
       : flight.price;
 
     const insuranceAmount = selectedInsurance
-      ? insurances.find(i => i._id === selectedInsurance)?.price || 0
+      ? insurances.find((i) => i._id === selectedInsurance)?.price || 0
       : 0;
 
     return flightAmount + insuranceAmount;
@@ -205,21 +219,23 @@ export default function BookFlightPage() {
       setErrors({});
 
       // Get userId from localStorage
-      const userData = localStorage.getItem('user');
+      const userData = localStorage.getItem("user");
       if (!userData) {
-        throw new Error('Please log in to book a flight');
+        throw new Error("Please log in to book a flight");
       }
 
       // Validate insurance selection if available
       if (insurances.length > 0 && selectedInsurance) {
-        const selectedInsuranceDetails = insurances.find(i => i._id === selectedInsurance);
+        const selectedInsuranceDetails = insurances.find(
+          (i) => i._id === selectedInsurance
+        );
         if (!selectedInsuranceDetails) {
-          throw new Error('Selected insurance not found');
+          throw new Error("Selected insurance not found");
         }
       }
 
       const user = JSON.parse(userData);
-      
+
       const bookingData = {
         userId: user._id,
         flightId: flight._id,
@@ -228,13 +244,13 @@ export default function BookFlightPage() {
         travelDate: flight.calculatedDeparture?.date || new Date(),
         contactEmail: contactDetails.email,
         contactPhone: contactDetails.phone,
-        specialRequests: contactDetails.specialRequests
+        specialRequests: contactDetails.specialRequests,
       };
 
-      const response = await fetch('http://localhost:5000/api/bookings', {
-        method: 'POST',
+      const response = await fetch("http://localhost:5000/api/bookings", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(bookingData),
       });
@@ -248,7 +264,6 @@ export default function BookFlightPage() {
 
       setBooking(data);
       setActiveStep(2); // Move to payment step
-
     } catch (err) {
       setErrors({ general: err.message });
     } finally {
@@ -266,26 +281,31 @@ export default function BookFlightPage() {
       // Simulate payment processing with 4-5 second delay
       setTimeout(async () => {
         // After delay, call the payment confirmation endpoint
-        const paymentResponse = await fetch(`http://localhost:5000/api/bookings/${booking.booking._id}/payment`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            paymentId: `pay_sim_${Date.now()}`,
-            orderId: `order_sim_${Date.now()}`,
-            paymentStatus: 'completed'
-          }),
-        });
+        const paymentResponse = await fetch(
+          `http://localhost:5000/api/bookings/${booking.booking._id}/payment`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              paymentId: `pay_sim_${Date.now()}`,
+              orderId: `order_sim_${Date.now()}`,
+              paymentStatus: "completed",
+            }),
+          }
+        );
 
         if (!paymentResponse.ok) {
           const text = await paymentResponse.text();
           throw new Error(`HTTP ${paymentResponse.status}: ${text}`);
         }
 
-        setSuccess('Payment processed successfully! Your booking is confirmed.');
+        setSuccess(
+          "Payment processed successfully! Your booking is confirmed."
+        );
         setPaymentDialog(false);
-        router.push('/bookings');
+        router.push("/bookings");
       }, 4500); // 4.5 seconds delay
     } catch (err) {
       setErrors({ payment: err.message });
@@ -296,20 +316,24 @@ export default function BookFlightPage() {
 
   if (loading) {
     return (
-      <Container maxWidth="md" sx={{ py: 8, textAlign: 'center' }}>
+      <Container maxWidth="md" sx={{ py: 8, textAlign: "center" }}>
         <CircularProgress size={60} />
-        <Typography variant="h6" sx={{ mt: 2 }}>Loading flight details...</Typography>
+        <Typography variant="h6" sx={{ mt: 2 }}>
+          Loading flight details...
+        </Typography>
       </Container>
     );
   }
 
   if (!flight) {
     return (
-      <Container maxWidth="md" sx={{ py: 8, textAlign: 'center' }}>
-        <Typography variant="h5" color="error">Flight not found</Typography>
+      <Container maxWidth="md" sx={{ py: 8, textAlign: "center" }}>
+        <Typography variant="h5" color="error">
+          Flight not found
+        </Typography>
         <Button
           variant="contained"
-          onClick={() => router.push('/search-flights')}
+          onClick={() => router.push("/search-flights")}
           sx={{ mt: 2 }}
         >
           Back to Search
@@ -327,7 +351,11 @@ export default function BookFlightPage() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography
+              variant="h6"
+              gutterBottom
+              sx={{ display: "flex", alignItems: "center", gap: 1 }}
+            >
               <PersonIcon /> Passenger Information
             </Typography>
 
@@ -337,7 +365,9 @@ export default function BookFlightPage() {
                   fullWidth
                   label="First Name"
                   value={passengerDetails.firstName}
-                  onChange={(e) => handlePassengerChange('firstName', e.target.value)}
+                  onChange={(e) =>
+                    handlePassengerChange("firstName", e.target.value)
+                  }
                   error={!!errors.firstName}
                   helperText={errors.firstName}
                   required
@@ -348,7 +378,9 @@ export default function BookFlightPage() {
                   fullWidth
                   label="Last Name"
                   value={passengerDetails.lastName}
-                  onChange={(e) => handlePassengerChange('lastName', e.target.value)}
+                  onChange={(e) =>
+                    handlePassengerChange("lastName", e.target.value)
+                  }
                   error={!!errors.lastName}
                   helperText={errors.lastName}
                   required
@@ -360,9 +392,10 @@ export default function BookFlightPage() {
                   label="Email"
                   type="email"
                   value={passengerDetails.email}
-                  onChange={(e) => handlePassengerChange('email', e.target.value)}
-                  error={!!errors.email}
-                  helperText={errors.email}
+                  InputProps={{
+                    readOnly: true,
+                  }}
+                  helperText="Email cannot be changed (logged-in user email)"
                   required
                 />
               </Grid>
@@ -371,7 +404,9 @@ export default function BookFlightPage() {
                   fullWidth
                   label="Phone"
                   value={passengerDetails.phone}
-                  onChange={(e) => handlePassengerChange('phone', e.target.value)}
+                  onChange={(e) =>
+                    handlePassengerChange("phone", e.target.value)
+                  }
                   error={!!errors.phone}
                   helperText={errors.phone}
                   required
@@ -382,14 +417,16 @@ export default function BookFlightPage() {
                   <DatePicker
                     label="Date of Birth"
                     value={passengerDetails.dateOfBirth}
-                    onChange={(date) => handlePassengerChange('dateOfBirth', date)}
+                    onChange={(date) =>
+                      handlePassengerChange("dateOfBirth", date)
+                    }
                     slotProps={{
                       textField: {
                         fullWidth: true,
                         error: !!errors.dateOfBirth,
                         helperText: errors.dateOfBirth,
-                        required: true
-                      }
+                        required: true,
+                      },
                     }}
                   />
                 </LocalizationProvider>
@@ -399,14 +436,24 @@ export default function BookFlightPage() {
                   <InputLabel>Gender</InputLabel>
                   <Select
                     value={passengerDetails.gender}
-                    onChange={(e) => handlePassengerChange('gender', e.target.value)}
+                    onChange={(e) =>
+                      handlePassengerChange("gender", e.target.value)
+                    }
                     label="Gender"
                   >
                     <MenuItem value="Male">Male</MenuItem>
                     <MenuItem value="Female">Female</MenuItem>
                     <MenuItem value="Other">Other</MenuItem>
                   </Select>
-                  {errors.gender && <Typography variant="caption" color="error" sx={{ mt: 1, ml: 2 }}>{errors.gender}</Typography>}
+                  {errors.gender && (
+                    <Typography
+                      variant="caption"
+                      color="error"
+                      sx={{ mt: 1, ml: 2 }}
+                    >
+                      {errors.gender}
+                    </Typography>
+                  )}
                 </FormControl>
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -414,7 +461,9 @@ export default function BookFlightPage() {
                   fullWidth
                   label="Passport Number (Optional)"
                   value={passengerDetails.passportNumber}
-                  onChange={(e) => handlePassengerChange('passportNumber', e.target.value)}
+                  onChange={(e) =>
+                    handlePassengerChange("passportNumber", e.target.value)
+                  }
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -422,7 +471,9 @@ export default function BookFlightPage() {
                   fullWidth
                   label="Nationality (Optional)"
                   value={passengerDetails.nationality}
-                  onChange={(e) => handlePassengerChange('nationality', e.target.value)}
+                  onChange={(e) =>
+                    handlePassengerChange("nationality", e.target.value)
+                  }
                 />
               </Grid>
             </Grid>
@@ -436,7 +487,11 @@ export default function BookFlightPage() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography
+              variant="h6"
+              gutterBottom
+              sx={{ display: "flex", alignItems: "center", gap: 1 }}
+            >
               <SecurityIcon /> Insurance Options
             </Typography>
 
@@ -458,10 +513,16 @@ export default function BookFlightPage() {
                                 <Typography variant="subtitle1">
                                   {insurance.name} - ₹{insurance.price}
                                 </Typography>
-                                <Typography variant="body2" color="text.secondary">
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                >
                                   {insurance.description}
                                 </Typography>
-                                <Typography variant="body2" color="text.secondary">
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                >
                                   Coverage: {insurance.coverage}
                                 </Typography>
                               </Box>
@@ -484,7 +545,11 @@ export default function BookFlightPage() {
               </FormControl>
             </Box>
 
-            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 4 }}>
+            <Typography
+              variant="h6"
+              gutterBottom
+              sx={{ display: "flex", alignItems: "center", gap: 1, mt: 4 }}
+            >
               <ContactMailIcon /> Contact Details
             </Typography>
 
@@ -495,9 +560,10 @@ export default function BookFlightPage() {
                   label="Contact Email"
                   type="email"
                   value={contactDetails.email}
-                  onChange={(e) => handleContactChange('email', e.target.value)}
-                  error={!!errors.contactEmail}
-                  helperText={errors.contactEmail}
+                  InputProps={{
+                    readOnly: true,
+                  }}
+                  helperText="Email cannot be changed (logged-in user email)"
                   required
                 />
               </Grid>
@@ -506,7 +572,7 @@ export default function BookFlightPage() {
                   fullWidth
                   label="Contact Phone"
                   value={contactDetails.phone}
-                  onChange={(e) => handleContactChange('phone', e.target.value)}
+                  onChange={(e) => handleContactChange("phone", e.target.value)}
                   error={!!errors.contactPhone}
                   helperText={errors.contactPhone}
                   required
@@ -519,7 +585,9 @@ export default function BookFlightPage() {
                   multiline
                   rows={4}
                   value={contactDetails.specialRequests}
-                  onChange={(e) => handleContactChange('specialRequests', e.target.value)}
+                  onChange={(e) =>
+                    handleContactChange("specialRequests", e.target.value)
+                  }
                 />
               </Grid>
             </Grid>
@@ -531,9 +599,7 @@ export default function BookFlightPage() {
               <Paper sx={{ p: 2 }}>
                 <Grid container spacing={2}>
                   <Grid item xs={12}>
-                    <Typography variant="subtitle1">
-                      Flight Details
-                    </Typography>
+                    <Typography variant="subtitle1">Flight Details</Typography>
                     <Typography variant="body2">
                       {flight.airline} - {flight.flightNumber}
                     </Typography>
@@ -541,27 +607,29 @@ export default function BookFlightPage() {
                       {flight.source} → {flight.destination}
                     </Typography>
                     <Typography variant="body2">
-                      Departure: {new Date(flight.calculatedDeparture.date).toLocaleDateString()} {flight.departure.time}
+                      Departure:{" "}
+                      {new Date(
+                        flight.calculatedDeparture.date
+                      ).toLocaleDateString()}{" "}
+                      {flight.departure.time}
                     </Typography>
                   </Grid>
                   <Grid item xs={12}>
-                    <Typography variant="subtitle1">
-                      Passenger
-                    </Typography>
+                    <Typography variant="subtitle1">Passenger</Typography>
                     <Typography variant="body2">
                       {passengerDetails.firstName} {passengerDetails.lastName}
                     </Typography>
                   </Grid>
                   <Grid item xs={12}>
-                    <Typography variant="subtitle1">
-                      Price Breakdown
-                    </Typography>
+                    <Typography variant="subtitle1">Price Breakdown</Typography>
                     <Typography variant="body2">
                       Flight Fare: ₹{flight.price}
                     </Typography>
                     {selectedInsurance && (
                       <Typography variant="body2">
-                        Insurance: ₹{insurances.find(i => i._id === selectedInsurance)?.price || 0}
+                        Insurance: ₹
+                        {insurances.find((i) => i._id === selectedInsurance)
+                          ?.price || 0}
                       </Typography>
                     )}
                     <Typography variant="subtitle1" sx={{ mt: 1 }}>
@@ -581,7 +649,11 @@ export default function BookFlightPage() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography
+              variant="h6"
+              gutterBottom
+              sx={{ display: "flex", alignItems: "center", gap: 1 }}
+            >
               <PaymentIcon /> Payment
             </Typography>
 
@@ -593,7 +665,8 @@ export default function BookFlightPage() {
                 Total Amount to Pay: ₹{calculateTotal()}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Click &ldquo;Complete Payment&rdquo; to proceed with the payment.
+                Click &ldquo;Complete Payment&rdquo; to proceed with the
+                payment.
               </Typography>
             </Paper>
           </motion.div>
@@ -611,7 +684,7 @@ export default function BookFlightPage() {
         <Box sx={{ mb: 4 }}>
           <Button
             startIcon={<ArrowBackIcon />}
-            onClick={() => router.push('/search-flights')}
+            onClick={() => router.push("/search-flights")}
             sx={{ mb: 2 }}
           >
             Back to Search
@@ -622,12 +695,13 @@ export default function BookFlightPage() {
           </Typography>
 
           {flight && (
-            <Card sx={{ p: 2, background: theme.palette.primary.light + '20' }}>
+            <Card sx={{ p: 2, background: theme.palette.primary.light + "20" }}>
               <Typography variant="h6">
                 {flight.airline} - {flight.flightNumber}
               </Typography>
               <Typography>
-                {flight.source} → {flight.destination} • {flight.departure.time} - {flight.arrival.time}
+                {flight.source} → {flight.destination} • {flight.departure.time}{" "}
+                - {flight.arrival.time}
               </Typography>
             </Card>
           )}
@@ -663,12 +737,10 @@ export default function BookFlightPage() {
         )}
 
         {/* Step Content */}
-        <Paper sx={{ p: 4, mb: 4 }}>
-          {renderStepContent(activeStep)}
-        </Paper>
+        <Paper sx={{ p: 4, mb: 4 }}>{renderStepContent(activeStep)}</Paper>
 
         {/* Navigation Buttons */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+        <Box sx={{ display: "flex", justifyContent: "space-between" }}>
           <Button
             disabled={activeStep === 0}
             onClick={handleBack}
@@ -679,17 +751,27 @@ export default function BookFlightPage() {
 
           <Button
             variant="contained"
-            onClick={activeStep === steps.length - 1 ? handlePayment : activeStep === 1 ? handleCreateBooking : handleNext}
+            onClick={
+              activeStep === steps.length - 1
+                ? handlePayment
+                : activeStep === 1
+                ? handleCreateBooking
+                : handleNext
+            }
             disabled={loading}
           >
-            {activeStep === steps.length - 1 ? 'Complete Payment' : activeStep === 1 ? 'Create Booking' : 'Next'}
+            {activeStep === steps.length - 1
+              ? "Complete Payment"
+              : activeStep === 1
+              ? "Create Booking"
+              : "Next"}
           </Button>
         </Box>
 
         {/* Payment Processing Dialog */}
         <Dialog open={paymentDialog} onClose={() => {}}>
           <DialogTitle>Processing Payment</DialogTitle>
-          <DialogContent sx={{ textAlign: 'center', py: 4 }}>
+          <DialogContent sx={{ textAlign: "center", py: 4 }}>
             <CircularProgress size={60} sx={{ mb: 2 }} />
             <Typography>Processing your payment...</Typography>
             <Typography variant="body2" color="text.secondary">

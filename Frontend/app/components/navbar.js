@@ -21,10 +21,11 @@ import {
   MenuItem,
   Fade,
   Backdrop,
+  Menu,
+  Collapse,
 } from "@mui/material";
 import {
   Flight,
-  Menu,
   Close,
   AccountCircle,
   Notifications,
@@ -32,6 +33,11 @@ import {
   Person,
   Settings,
   Bookmark,
+  SmartToy,
+  ExpandMore,
+  ExpandLess,
+  AccountBalanceWallet,
+  Map,
 } from "@mui/icons-material";
 import { useTheme } from "@mui/material/styles";
 
@@ -45,6 +51,8 @@ export default function Navbar() {
   const [user, setUser] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [aiMenuAnchor, setAiMenuAnchor] = useState(null);
+  const [mobileAiMenuOpen, setMobileAiMenuOpen] = useState(false);
 
   // Function to check and update login status
   const checkLoginStatus = () => {
@@ -116,6 +124,18 @@ export default function Navbar() {
     setProfileModalOpen(false);
   };
 
+  const handleAiMenuOpen = (event) => {
+    setAiMenuAnchor(event.currentTarget);
+  };
+
+  const handleAiMenuClose = () => {
+    setAiMenuAnchor(null);
+  };
+
+  const handleMobileAiMenuToggle = () => {
+    setMobileAiMenuOpen(!mobileAiMenuOpen);
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("user");
     localStorage.removeItem("isLoggedIn");
@@ -138,6 +158,21 @@ export default function Navbar() {
   const authItems = [
     { label: "Login", href: "/login" },
     { label: "Register", href: "/register" },
+  ];
+
+  const aiFeatures = [
+    {
+      label: "AI Budget Planner",
+      href: "/budget-planner",
+      icon: <AccountBalanceWallet sx={{ fontSize: 20, mr: 1 }} />,
+      description: "Smart travel cost estimation"
+    },
+    {
+      label: "AI Itinerary Planner",
+      href: "/itinerary-planner",
+      icon: <Map sx={{ fontSize: 20, mr: 1 }} />,
+      description: "Personalized travel plans"
+    },
   ];
 
   const drawer = (
@@ -166,23 +201,86 @@ export default function Navbar() {
       <List>
         {/* Show navigation items only when logged in */}
         {isLoggedIn ? (
-          navigationItems.map((item) => (
-            <ListItem
-              key={item.label}
-              component={Link}
-              href={item.href}
-              onClick={handleDrawerToggle}
+          <>
+            {navigationItems.map((item) => (
+              <ListItem
+                key={item.label}
+                component={Link}
+                href={item.href}
+                onClick={handleDrawerToggle}
+                sx={{
+                  color: "text.primary",
+                  textDecoration: "none",
+                  "&:hover": {
+                    backgroundColor: `${theme.palette.primary.main}15`,
+                  },
+                }}
+              >
+                <ListItemText primary={item.label} />
+              </ListItem>
+            ))}
+            
+            {/* AI Features Dropdown in Mobile */}
+            <ListItem 
+              onClick={handleMobileAiMenuToggle}
               sx={{
                 color: "text.primary",
-                textDecoration: "none",
+                cursor: "pointer",
                 "&:hover": {
                   backgroundColor: `${theme.palette.primary.main}15`,
                 },
               }}
             >
-              <ListItemText primary={item.label} />
+              <ListItemText 
+                primary={
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <SmartToy sx={{ mr: 1, fontSize: 20, color: theme.palette.secondary.main }} />
+                      AI Features
+                    </Box>
+                    {mobileAiMenuOpen ? <ExpandLess /> : <ExpandMore />}
+                  </Box>
+                } 
+              />
             </ListItem>
-          ))
+            
+            <Collapse in={mobileAiMenuOpen} timeout="auto" unmountOnExit>
+              <List component="div" disablePadding>
+                {aiFeatures.map((feature) => (
+                  <ListItem
+                    key={feature.label}
+                    component={Link}
+                    href={feature.href}
+                    onClick={() => {
+                      handleDrawerToggle();
+                      setMobileAiMenuOpen(false);
+                    }}
+                    sx={{
+                      pl: 4,
+                      color: "text.primary",
+                      textDecoration: "none",
+                      "&:hover": {
+                        backgroundColor: `${theme.palette.secondary.main}15`,
+                      },
+                    }}
+                  >
+                    <ListItemText 
+                      primary={
+                        <Box>
+                          <Typography variant="body2" fontWeight="medium">
+                            {feature.label}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {feature.description}
+                          </Typography>
+                        </Box>
+                      } 
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Collapse>
+          </>
         ) : (
           <ListItem
             component={Link}
@@ -271,12 +369,41 @@ export default function Navbar() {
             <Box sx={{ display: "flex", flexGrow: 1, gap: 1 }}>
               {/* Show navigation items only when logged in */}
               {isLoggedIn ? (
-                navigationItems.map((item) => (
+                <>
+                  {navigationItems.map((item) => (
+                    <Button
+                      key={item.label}
+                      color="inherit"
+                      component={Link}
+                      href={item.href}
+                      sx={{
+                        mx: 0.5,
+                        position: "relative",
+                        "&::after": {
+                          content: '""',
+                          position: "absolute",
+                          bottom: 0,
+                          left: "50%",
+                          width: pathname === item.href ? "100%" : "0%",
+                          height: "2px",
+                          background: "white",
+                          transition: "all 0.3s ease",
+                          transform: "translateX(-50%)",
+                        },
+                        "&:hover::after": {
+                          width: "100%",
+                        },
+                      }}
+                    >
+                      {item.label}
+                    </Button>
+                  ))}
+                  
+                  {/* AI Features Dropdown */}
                   <Button
-                    key={item.label}
                     color="inherit"
-                    component={Link}
-                    href={item.href}
+                    onClick={handleAiMenuOpen}
+                    endIcon={<ExpandMore />}
                     sx={{
                       mx: 0.5,
                       position: "relative",
@@ -285,9 +412,9 @@ export default function Navbar() {
                         position: "absolute",
                         bottom: 0,
                         left: "50%",
-                        width: pathname === item.href ? "100%" : "0%",
+                        width: aiFeatures.some(f => pathname === f.href) ? "100%" : "0%",
                         height: "2px",
-                        background: "white",
+                        background: theme.palette.secondary.main,
                         transition: "all 0.3s ease",
                         transform: "translateX(-50%)",
                       },
@@ -296,9 +423,54 @@ export default function Navbar() {
                       },
                     }}
                   >
-                    {item.label}
+                    AI Features
                   </Button>
-                ))
+
+                  {/* AI Features Menu */}
+                  <Menu
+                    anchorEl={aiMenuAnchor}
+                    open={Boolean(aiMenuAnchor)}
+                    onClose={handleAiMenuClose}
+                    PaperProps={{
+                      sx: {
+                        mt: 1.5,
+                        minWidth: 240,
+                        borderRadius: 2,
+                        boxShadow: 4,
+                      }
+                    }}
+                  >
+                    {aiFeatures.map((feature) => (
+                      <MenuItem
+                        key={feature.label}
+                        component={Link}
+                        href={feature.href}
+                        onClick={handleAiMenuClose}
+                        sx={{
+                          py: 1.5,
+                          px: 2,
+                          "&:hover": {
+                            backgroundColor: `${theme.palette.secondary.main}15`,
+                          },
+                        }}
+                      >
+                        <Box sx={{ display: "flex", alignItems: "flex-start" }}>
+                          <Box sx={{ color: theme.palette.secondary.main, mt: 0.25 }}>
+                            {feature.icon}
+                          </Box>
+                          <Box sx={{ ml: 1 }}>
+                            <Typography variant="body1" fontWeight="medium">
+                              {feature.label}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {feature.description}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </MenuItem>
+                    ))}
+                  </Menu>
+                </>
               ) : (
                 // Show only Home button when not logged in
                 <Button

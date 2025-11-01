@@ -9,10 +9,8 @@ const bcrypt = require("bcryptjs");
 const app = express();
 const port = 5000;
 
-// Define cache directory
 const cacheDir = path.join(__dirname, 'cache');
 
-// Configure CORS
 app.use(cors({
   origin: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -31,10 +29,9 @@ db.once("open", () => {
   console.log("Connected to MongoDB");
 });
 
-// Airline Schema
 const airlineSchema = new mongoose.Schema({
   airlineName: { type: String, required: true, unique: true },
-  airlineCode: { type: String, required: true, unique: true }, // 3-letter code
+  airlineCode: { type: String, required: true, unique: true }, 
   email: { type: String, required: true },
   phone: { type: String, required: true },
   address: { type: String, required: true },
@@ -652,7 +649,22 @@ app.delete("/api/airlines/flights/:flightId", async (req, res) => {
   }
 });
 
-
+// Get passenger by ID
+app.get("/api/passengers/:passengerId", async (req, res) => {
+  try {
+    const { passengerId } = req.params;
+    
+    const passenger = await Passenger.findById(passengerId);
+    if (!passenger) {
+      return res.status(404).json({ message: "Passenger not found" });
+    }
+    
+    res.json(passenger);
+  } catch (err) {
+    console.error("Error fetching passenger:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
 app.get("/users", async (req, res) => {
   try {
     const users = await User.find();
